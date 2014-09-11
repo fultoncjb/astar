@@ -10,24 +10,29 @@ class MapDrawArea : public Gtk::DrawingArea
 	public:
 		MapDrawArea();
 		virtual ~MapDrawArea();
-		m_map guiMapData;
+
+		// TODO: move this to the MapWindow so we can only copy the variables once so the redraw isn't so slow
+		//m_map guiMapData;
 	protected:
 		virtual bool on_draw(const Cairo::RefPtr<Cairo::Context>& cr);
-};
-
-class MapWindow : public Gtk::Window
-{
-	public:
-		MapWindow();
-		virtual ~MapWindow();
-	protected:
-		MapDrawArea m_draw;
 };
 
 // Main window
 class ExampleWindow : public Gtk::Window
 {
 public:
+  class MapWindow : public Gtk::Window
+  {
+	public:
+		MapWindow();
+		
+		// Constructor for ExampleWindow input
+		explicit MapWindow(const ExampleWindow &e);
+		m_map guiMapData;
+		virtual ~MapWindow();
+	protected:
+		MapDrawArea m_draw;
+  };
   ExampleWindow();
   virtual ~ExampleWindow();
 
@@ -39,8 +44,9 @@ protected:
   Gtk::ButtonBox m_ButtonBox;
   Gtk::Button m_Button_File;
   Gtk::Button m_Button_Folder;
-  MapWindow m_mapWindow;
-  //MapDrawArea m_draw;
+
+  std::string inputFilename;
+  std::string outputFilename;
 };
 
 #endif //GTKMM_EXAMPLEWINDOW_H

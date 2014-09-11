@@ -12,14 +12,6 @@
 
 using namespace std;
 
-/*
-int main()
-{
-	m_map astarMap;
-	astarMap.getPath("DataSets/set5.dat","set5.out");
-	return 0;
-}*/
-
 bool m_map::SortByF (const node *node1, const node *node2) 
 { return node1->f > node2->f; }
 
@@ -127,19 +119,14 @@ void m_map::printPath(std::string fileString)
 
 	if (outputFile.is_open() )
 	{
-		//cout << "********OPTIMAL PATH********" << endl;
 		outputFile << "********OPTIMAL PATH********" << endl << endl;
 
 		while( !(curNode->x == m_startCoord.x && curNode->y == m_startCoord.y) )
 		{
 			m_optPath.push_back(curNode);
-			//cout << "X: " << curNode->x << endl;
 			outputFile << "X: " << curNode->x << endl;
-			//cout << "Y: " << curNode->y << endl;
 			outputFile << "Y: " << curNode->y << endl;
-			//cout << "F: " << curNode->f << endl;
 			outputFile << "F: " << curNode->f << endl;
-			//cout << endl;
 			outputFile << endl;
 			curNode = curNode->parent;
 		}
@@ -147,13 +134,9 @@ void m_map::printPath(std::string fileString)
 
 	// Print out the starting node
 	m_optPath.push_back(curNode);
-	//cout << "X: " << curNode->x << endl;
 	outputFile << "X: " << curNode->x << endl;
-	//cout << "Y: " << curNode->y << endl;
 	outputFile << "Y: " << curNode->y << endl;
-	//cout << "F: " << curNode->f << endl;
 	outputFile << "F: " << curNode->f << endl;
-	//cout << endl;
 	outputFile << endl;
 
 	outputFile.close();
@@ -231,44 +214,40 @@ m_map::node* m_map::checkValidNode(int position, node *curNode)
 	float cost;
 
 	// Check the coordinates are inside the grid and not an obstacle
-	if(VALID_NODE)
+	if(VALID_NODE && !m_nodeGrid[desiredNode.x][desiredNode.y].isObstacle)
 	{
-		if(!m_nodeGrid[desiredNode.x][desiredNode.y].isObstacle)
+		// Calculate movement cost
+		cost = curNode->g + sqrt(double(shift.x*shift.x + shift.y*shift.y));
+
+		// Movement cost less
+		if(cost < m_nodeGrid[desiredNode.x][desiredNode.y].g )
 		{
-			// Calculate movement cost
-			cost = curNode->g + sqrt(double(shift.x*shift.x + shift.y*shift.y));
-
-			// Movement cost less
-			if(cost < m_nodeGrid[desiredNode.x][desiredNode.y].g )
+			// In open set
+			if(m_nodeGrid[desiredNode.x][desiredNode.y].isOpenSet)
 			{
-				// In open set
-				if(m_nodeGrid[desiredNode.x][desiredNode.y].isOpenSet)
+				// Remove neighbor from open
+				m_nodeGrid[desiredNode.x][desiredNode.y].isOpenSet = false;
+				for(std::vector<node*>::iterator itr=m_openSet.begin();itr!=m_openSet.end();++itr)
 				{
-					// Remove neighbor from open
-					m_nodeGrid[desiredNode.x][desiredNode.y].isOpenSet = false;
-					for(std::vector<node*>::iterator itr=m_openSet.begin();itr!=m_openSet.end();++itr)
-					{
-						if((*itr)->x==desiredNode.x && (*itr)->y==desiredNode.y)
-							m_openSet.erase(itr);
-					}
+					if((*itr)->x==desiredNode.x && (*itr)->y==desiredNode.y)
+						m_openSet.erase(itr);
 				}
+			}
 
-				// In closed set
-				if(m_nodeGrid[desiredNode.x][desiredNode.y].isClosedSet)
-					// Remove neighbor from closed
-					m_nodeGrid[desiredNode.x][desiredNode.y].isClosedSet = false;
-			}
-			
-			if(!m_nodeGrid[desiredNode.x][desiredNode.y].isOpenSet && !m_nodeGrid[desiredNode.x][desiredNode.y].isClosedSet)
-			{
-				m_nodeGrid[desiredNode.x][desiredNode.y].g = cost;
-				m_nodeGrid[desiredNode.x][desiredNode.y].f = m_nodeGrid[desiredNode.x][desiredNode.y].g + m_nodeGrid[desiredNode.x][desiredNode.y].h;
-				m_nodeGrid[desiredNode.x][desiredNode.y].isOpenSet = true;
-				nodePtr = &m_nodeGrid[desiredNode.x][desiredNode.y];
-				m_nodeGrid[desiredNode.x][desiredNode.y].parent = &m_nodeGrid[curNode->x][curNode->y];
-			}
+			// In closed set
+			if(m_nodeGrid[desiredNode.x][desiredNode.y].isClosedSet)
+				// Remove neighbor from closed
+				m_nodeGrid[desiredNode.x][desiredNode.y].isClosedSet = false;
 		}
 		
+		if(!m_nodeGrid[desiredNode.x][desiredNode.y].isOpenSet && !m_nodeGrid[desiredNode.x][desiredNode.y].isClosedSet)
+		{
+			m_nodeGrid[desiredNode.x][desiredNode.y].g = cost;
+			m_nodeGrid[desiredNode.x][desiredNode.y].f = m_nodeGrid[desiredNode.x][desiredNode.y].g + m_nodeGrid[desiredNode.x][desiredNode.y].h;
+			m_nodeGrid[desiredNode.x][desiredNode.y].isOpenSet = true;
+			nodePtr = &m_nodeGrid[desiredNode.x][desiredNode.y];
+			m_nodeGrid[desiredNode.x][desiredNode.y].parent = &m_nodeGrid[curNode->x][curNode->y];
+		}
 	}
 
 	return nodePtr;
@@ -283,7 +262,7 @@ bool m_map::getBestNode()
 
 	// Add the best node to the closed set
 	curNode->isClosedSet = true;
-	m_closedSet.push_back(curNode);
+	//m_closedSet.push_back(curNode);
 	curNode->isOpenSet = false;
 
 	// Initialize the possible nodes to be added to the heap
