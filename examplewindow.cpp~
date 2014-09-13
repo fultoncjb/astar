@@ -122,19 +122,28 @@ bool MapDrawArea::on_draw(const Cairo::RefPtr<Cairo::Context>& cr)
   const int lesser = MIN(width, height);
 
   // We should be able to just store the obstacles and path once
+  // Do need to update based on the window size
   const std::vector<m_map::coord> vObstacles = guiMapData.copyObstacles();
+  const std::vector<m_map::coord> optimalPath = guiMapData.copyOptPath();
   const m_map::coord maxXY = guiMapData.copyMaxCoord();
   m_map::coord originCoord = guiMapData.copyStartCoord();
+  m_map::coord goalCoord = guiMapData.copyEndCoord();
+ 
+  // DEBUG: Output the file characterstics
+  std::cout << "After obstacle size: " << vObstacles.size() << std::endl;
+  std::cout << "After max values " << maxXY.x << "," << maxXY.y << std::endl; 
+ 
+  // These have to be updated each iteration
   originCoord.x = int( float(width)*float(originCoord.x)/float(maxXY.x) );
   originCoord.y = int( float(height)*float(originCoord.y)/float(maxXY.y) );
-  m_map::coord goalCoord = guiMapData.copyEndCoord();
   goalCoord.x = int( float(width)*float(goalCoord.x)/float(maxXY.x) );
   goalCoord.y = int( float(height)*float(goalCoord.y)/float(maxXY.y) );
-  const std::vector<m_map::coord> optimalPath = guiMapData.copyOptPath();
+  
 
   // Draw obstacles
   std::vector<m_map::coord> scaledObsCoord;
   m_map::coord stdCoord;
+
   // Adjust obstacle values based on window size
   for(std::vector<m_map::coord>::const_iterator itr=vObstacles.begin();itr!=vObstacles.end();++itr)
   {

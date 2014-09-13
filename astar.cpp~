@@ -103,7 +103,6 @@ bool m_map::m_initGrid(std::string fileString)
 	for(std::vector<coord>::iterator itr = m_obstacles.begin(); itr != m_obstacles.end(); ++itr)
 		m_nodeGrid[(*itr).x][(*itr).y].isObstacle = true;
 
-	
 	return true;
 
 }
@@ -225,13 +224,11 @@ m_map::node* m_map::checkValidNode(int position, node *curNode)
 			// In open set
 			if(m_nodeGrid[desiredNode.x][desiredNode.y].isOpenSet)
 			{
-				// Remove neighbor from open
+				// Remove neighbor from open set
 				m_nodeGrid[desiredNode.x][desiredNode.y].isOpenSet = false;
-				for(std::vector<node*>::iterator itr=m_openSet.begin();itr!=m_openSet.end();++itr)
-				{
-					if((*itr)->x==desiredNode.x && (*itr)->y==desiredNode.y)
-						m_openSet.erase(itr);
-				}
+				std::vector<node*>::iterator itr = find(m_openSet.begin(),m_openSet.end(),&m_nodeGrid[desiredNode.x][desiredNode.y]); 
+				if(*itr)
+					m_openSet.erase(itr);
 			}
 
 			// In closed set
@@ -240,12 +237,18 @@ m_map::node* m_map::checkValidNode(int position, node *curNode)
 				m_nodeGrid[desiredNode.x][desiredNode.y].isClosedSet = false;
 		}
 		
+		// Not in open or closed set
 		if(!m_nodeGrid[desiredNode.x][desiredNode.y].isOpenSet && !m_nodeGrid[desiredNode.x][desiredNode.y].isClosedSet)
 		{
+			// Calculate A* parameters
 			m_nodeGrid[desiredNode.x][desiredNode.y].g = cost;
 			m_nodeGrid[desiredNode.x][desiredNode.y].f = m_nodeGrid[desiredNode.x][desiredNode.y].g + m_nodeGrid[desiredNode.x][desiredNode.y].h;
+
+			// Add to open set
 			m_nodeGrid[desiredNode.x][desiredNode.y].isOpenSet = true;
+			// Return a valid pointer
 			nodePtr = &m_nodeGrid[desiredNode.x][desiredNode.y];
+			// Set parent to the current node
 			m_nodeGrid[desiredNode.x][desiredNode.y].parent = &m_nodeGrid[curNode->x][curNode->y];
 		}
 	}
@@ -257,12 +260,10 @@ bool m_map::getBestNode()
 {
 
 	// Set the current node to the top of the open set
-	// TODO: dereference this pointer so we can knock it off the open set
 	node *curNode = m_openSet.back();
 
 	// Add the best node to the closed set
 	curNode->isClosedSet = true;
-	//m_closedSet.push_back(curNode);
 	curNode->isOpenSet = false;
 
 	// Initialize the possible nodes to be added to the heap
@@ -283,11 +284,9 @@ bool m_map::getBestNode()
 	// Pop the current node off the open set
 	m_openSet.pop_back();
 
+	// Run out of nodes to explore, no possible solution
 	if(m_openSet.size() < 1 && possibleNodes.size()<1)
 		return false;
-
-	// Sort by f
-	//std::sort( possibleNodes.begin(),possibleNodes.end(),SortByF );
 
 	// Add the nodes on the open set
 	for(std::vector<node>::iterator itr = possibleNodes.begin(); itr != possibleNodes.end(); ++itr)
@@ -316,21 +315,11 @@ bool m_map::getPath(std::string fileString, std::string outputFileString)
 
 	// Current node is the start node
 	node *curNode = m_openSet.front();
-	
-	int cycleCount=0;
 
 	// Expand nodes until the goal node is reached
 	while( !(curNode->x == m_endCoord.x && curNode->y == m_endCoord.y) && m_openSet.size()>0)
-	{
-		cycleCount++;
-		if(cycleCount % 1000 == 1)
-		{
-			//cout << curNode->x << "," << curNode->y << endl;
-			//cout << m_openSet.size() << endl;
-			cout << ".";
-		}		
-		// Search around for nodes that you can explore, add appropriate ones to heap
-		//printHeap();
+	{		
+		// Search around for nodes that you can explore, add appropriate ones to open set
 		if( !getBestNode() )
 		{
 			cout << "No possible solution." << endl;
@@ -341,12 +330,13 @@ bool m_map::getPath(std::string fileString, std::string outputFileString)
 			curNode = m_openSet.back();
 	}
 
+	// Write output to file
 	printPath(outputFileString);
 
 	// Add the final node to the path
 	m_optPath.push_back(curNode);
 
-	//printPath(outputFileString);	
+	// Delete dynamically allocated memory	
 	cleanMem();
 
 	return true;
@@ -370,7 +360,6 @@ void m_map::leastCostToBack()
 	{
 		if( (*itr)->f < minF)
 		{
-			//minNode = *itr;
 			minItr = itr;
 			minF = (*itr)->f;
 		}	
@@ -417,3 +406,4 @@ std::vector<m_map::coord> m_map::copyOptPath()
 
 	return vecOptPath;
 }
+

@@ -38,13 +38,14 @@ class m_map{
 		coord copyMaxCoord();
 		coord copyStartCoord();
 		coord copyEndCoord();
-		std::vector<coord> copyOptPath()
+		std::vector<coord> copyOptPath();
 	protected:
 		// Functions
 		bool m_initGrid(std::string fileString);
 		node *checkValidNode(int position, node *curNode);
 		bool getBestNode();
 		void leastCostToBack();
+		std::vector<node*>::iterator binarySearch(coord targetNode);
 
 		// Data objects
 		coord m_startCoord;
@@ -52,7 +53,7 @@ class m_map{
 		coord m_maxXY;
 		node **m_nodeGrid;
 		std::vector<node*> m_openSet;
-		std::vector<node*> m_closedSet;
+		//std::vector<node*> m_closedSet;
 		std::vector<node*> m_optPath;
 		std::vector<coord> m_obstacles;
 };
