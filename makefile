@@ -9,7 +9,7 @@ LIBS = jsoncpp
 all: astar
 
 clean:
-	rm -f *.o *.out simple
+	rm -f *.o *.out astar
 
 astar: astar.cpp astar.h jsoncpp.cpp menuwindow.cpp menuwindow.h main.cpp 
 	${CC} ${COMPILE_OPTION} astar.cpp jsoncpp.cpp menuwindow.cpp main.cpp `pkg-config gtkmm-3.0 --cflags --libs` ${CXXFLAGS} -l ${LIBS} -o astar
