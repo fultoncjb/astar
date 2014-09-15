@@ -34,16 +34,23 @@ bool m_map::m_initGrid(std::string fileString)
 	Json::Value obsValue;
 
 	std::ifstream mapFile(fileString.c_str());
+	//return false;
 
 	coord curCoord;
 
 	if( mapFile.is_open() )
 	{
-		mapFile >> mapValue;
-
-		startValue = mapValue.get("robotStart","UTF-8");
-		endValue = mapValue.get("robotEnd","UTF-8");
-		obsValue = mapValue.get("obstacles","UTF-8");
+		try
+		{
+			mapFile >> mapValue;
+			startValue = mapValue.get("robotStart","UTF-8");
+			endValue = mapValue.get("robotEnd","UTF-8");
+			obsValue = mapValue.get("obstacles","UTF-8");
+		}
+		catch(std::exception &fileFormat)
+		{
+			return false;
+		} 
 
 		// Set the start and end coordinates
 		m_startCoord.x = startValue[0].asInt();
@@ -352,7 +359,6 @@ void m_map::cleanMem()
 void m_map::leastCostToBack()
 {
 
-	//node *minNode = m_openSet.back();
 	float minF = (*m_openSet.back()).f;
 	std::vector<node*>::iterator minItr = m_openSet.begin();
 
