@@ -1,4 +1,4 @@
-#include "menuwindow.h"
+ #include "menuwindow.h"
 #include <iostream>
 #include <sys/time.h>
 
@@ -7,15 +7,15 @@ MenuWindow::MenuWindow()
   m_Button_File("Choose File")
 {
 	set_title("Astar");
-	//maximize();
 
 	m_ButtonBox.pack_start(m_Button_File);
 	m_Button_File.signal_clicked().connect(sigc::mem_fun(*this,
 	      &MenuWindow::on_button_file_clicked) );
 
 	add(m_ButtonBox);
-
-	show_all_children();
+	m_ButtonBox.show();
+	m_Button_File.show();
+	//show_all_children();
 }
 
 MenuWindow::~MenuWindow()
@@ -39,22 +39,38 @@ MenuWindow::MapWindow::MapWindow()
 MenuWindow::MapWindow::MapWindow(const MenuWindow &e)
 : m_draw()
 {
+	// Set title, maximize window
 	set_title(e.inputFilename);
 	maximize();
 
+	// Start timer
 	timeval t1,t2;
-	//t1 = std::chrono::gettimeofday();
 	gettimeofday(&t1,NULL);
 
-	m_draw.guiMapData.getPath( e.inputFilename.c_str(), e.outputFilename.c_str() );
+	// Solve the path
+	bool result = m_draw.guiMapData.getPath( e.inputFilename.c_str(), e.outputFilename.c_str() );
 
+	// Stop timer
 	gettimeofday(&t2,NULL);
-	//t2 = gettimeofday();
 
-	std::cout << (double)t2.tv_sec-(double)t1.tv_sec+((double)t2.tv_usec)/1e6-((double)t1.tv_usec/1e6) << std::endl;
+	// Print solving time only when the map was solved
+	std::stringstream messageString;
+	if(result)
+		messageString << "Map successfully solved in: " << (double)t2.tv_sec-(double)t1.tv_sec+((double)t2.tv_usec)/1e6-((double)t1.tv_usec/1e6) << " seconds";
+	// Map not solvable
+	else
+	{
+		messageString << "There is no possible path for the robot to reach the given goal coordinate from the given start coordinate. Please check your map file.";
+	}
 
+	// Popup message dialog
+	Gtk::MessageDialog dlg( messageString.str() );
+	dlg.run();
+
+	// Drawing area for the map
 	add(m_draw);
 
+	// Show
 	show_all_children();
 }
 
@@ -89,13 +105,13 @@ void MenuWindow::on_button_file_clicked()
 
 	//Show the dialog and wait for a user response:
 	int result = dialog.run();
+	//dialog.hide();
 
 	//Handle the response:
 	switch(result)
 	{
 		case(Gtk::RESPONSE_OK):
 		{
-			std::cout << "Open clicked." << std::endl;	
 
 			//Notice that this is a std::string, not a Glib::ustring.
 			// Need to pass this to the astar algorithm
@@ -108,11 +124,11 @@ void MenuWindow::on_button_file_clicked()
 
 			break;
 		}
-		case(Gtk::RESPONSE_CANCEL):
+		/*case(Gtk::RESPONSE_CANCEL):
 		{
 			std::cout << "Cancel clicked." << std::endl;
 			break;
-		}
+		}*/
 		default:
 		{
 			std::cout << "Unexpected button clicked." << std::endl;

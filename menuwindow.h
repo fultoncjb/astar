@@ -32,6 +32,8 @@ class MenuWindow : public Gtk::Window
 			virtual ~MapWindow();
 		protected:
 			MapDrawArea m_draw;
+			//MapErrorWindow m_error;
+			
 		};
 		MenuWindow();
 		virtual ~MenuWindow();

@@ -12,12 +12,21 @@
 
 using namespace std;
 
-bool m_map::SortByF (const node *node1, const node *node2) 
+bool SortByF (const m_map::node *node1, const m_map::node *node2) 
 { return node1->f > node2->f; }
 
 m_map::m_map()
 {
 
+}
+
+// Node construct
+m_map::node::node()
+{
+	isObstacle = false;
+	isOpenSet = false;
+	isClosedSet = false;
+	g = 0;
 }
 
 
@@ -97,21 +106,17 @@ bool m_map::m_initGrid(std::string fileString)
 	{
 		for(int jj=0;jj<=m_maxXY.y;jj++)
 		{
-			m_nodeGrid[ii][jj].g = 0;
 			m_nodeGrid[ii][jj].h = sqrt( pow(double(ii-m_endCoord.x),2)+pow(double(jj-m_endCoord.y),2) );
 			m_nodeGrid[ii][jj].f = m_nodeGrid[ii][jj].g + m_nodeGrid[ii][jj].h;
 			// Initialize all parents to (0,0)
 			m_nodeGrid[ii][jj].parent = &m_nodeGrid[0][0];
 			m_nodeGrid[ii][jj].location.x = ii;
 			m_nodeGrid[ii][jj].location.y = jj;
-			m_nodeGrid[ii][jj].isObstacle = false;
-			m_nodeGrid[ii][jj].isOpenSet = false;
-			m_nodeGrid[ii][jj].isClosedSet = false;
 				
 		}
 	}
 
-	// TODO: may be able to accomplish this without referencing the grid
+	// Populate the obstacles vector
 	for(std::vector<coord>::iterator itr = m_obstacles.begin(); itr != m_obstacles.end(); ++itr)
 		m_nodeGrid[(*itr).x][(*itr).y].isObstacle = true;
 
@@ -311,6 +316,7 @@ bool m_map::putBestNodeOnBack()
 
 	// Put the lowest movement cost to on the back of open set
 	leastCostToBack();
+	//std::sort( m_openSet.begin(),m_openSet.end(),SortByF );
 	
 	return true;
 	

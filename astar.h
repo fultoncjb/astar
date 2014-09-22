@@ -27,6 +27,7 @@ class m_map{
 
 		// Each grid cell initialized to a node
 		struct node{
+			node();
 			bool isOpenSet;		// in open set
 			bool isClosedSet;	// in closed set
 			bool isObstacle;	// is an obstacle
@@ -39,7 +40,6 @@ class m_map{
 
 		
 		m_map();
-		bool SortByF (const node *node1, const node *node2);
 		void printPath(std::string fileString);
 		void printHeap();
 		bool getPath(std::string fileString, std::string outputFileString);
@@ -50,7 +50,7 @@ class m_map{
 		coord copyEndCoord();
 		std::vector<coord> copyOptPath();
 	protected:
-		// Functions
+		// Functions	
 		bool m_initGrid(std::string fileString);
 		node *checkValidNode(int position, node *curNode);
 		bool putBestNodeOnBack();	// put the node with the least movement cost on back of the open set
@@ -65,4 +65,6 @@ class m_map{
 		std::vector<node*> m_optPath;	// optimal path
 		std::vector<coord> m_obstacles;	// obstacles
 };
+
+bool SortByF (const m_map::node *node1, const m_map::node *node2);
 
