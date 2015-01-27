@@ -12,59 +12,78 @@
 #include<iostream>
 #include<string>
 #include<fstream>
-#include<json/json.h>
+#include"json/json.h"
 #include<math.h>
 #include<vector>
+#include <sys/time.h>
+
+// Coordinate struct
+struct Coord{
+	int x;
+	int y;
+};
+
+enum state { UNINITIALIZED,
+			 OBSTACLES_ONLY,
+			 FULL_MAP };
+
+// Each grid cell initialized to a node
+struct Node{
+	Node();
+	bool isOpenSet;		// in open set
+	bool isClosedSet;	// in closed set
+	bool isObstacle;	// is an obstacle
+	Node *parent;		// pointer to its parent node
+	float g;		// movement cost
+	float f;		// total cost
+	float h;		// distance from goal
+	Coord location;		// coordinates in grid
+};
 
 // Full map of explorable nodes
 class m_map{
 	public:
-		// Coordinate struct
-		struct coord{
-			int x;
-			int y;
-		};
 
-		// Each grid cell initialized to a node
-		struct node{
-			node();
-			bool isOpenSet;		// in open set
-			bool isClosedSet;	// in closed set
-			bool isObstacle;	// is an obstacle
-			node *parent;		// pointer to its parent node
-			float g;		// movement cost
-			float f;		// total cost
-			float h;		// distance from goal
-			coord location;		// coordinates in grid
-		};
+		// Allow windows access to private/protected members
+		friend class MapDrawArea;
 
-		
 		m_map();
 		void printPath(std::string fileString);
 		void printHeap();
-		bool getPath(std::string fileString, std::string outputFileString);
-		void cleanMem();
-		std::vector<coord> copyObstacles();
-		coord copyMaxCoord();
-		coord copyStartCoord();
-		coord copyEndCoord();
-		std::vector<coord> copyOptPath();
+		bool SolveOptimalPath(std::string fileString, std::string outputFileString);
+		std::vector<Coord> copyObstacles();
+		Coord copyMaxCoord();
+		Coord copyStartCoord();
+		Coord copyEndCoord();
+		std::vector<Coord> copyOptPath();
+		state MapState;
+		bool MapInitialized;
+		bool InitMap(std::string fileString);
+
+		~m_map();
 	protected:
 		// Functions	
-		bool m_initGrid(std::string fileString);
-		node *checkValidNode(int position, node *curNode);
-		bool putBestNodeOnBack();	// put the node with the least movement cost on back of the open set
-		void leastCostToBack();
+		bool AddExplorableNodes();	// put the node with the least movement cost on back of the open set
+		void DeleteNodeFromOpenSet(Node &n);
+		void DeleteNodeFromClosedSet(Node &n);
+		void AddNodeToOpenSet(Coord desiredCoord,Coord cost);
+		void InsertNodeInOpenSet(Node &n);
+		int FindOpenSetPosition(Node n);
+
+		Coord GetLocalMovementCost(int position);
+		bool NodeIsInsideGrid(Coord coord);
+		bool NodeIsValid(Coord coord);
+		bool NodeIsObstacle(Coord coord);
 
 		// Data objects
-		coord m_startCoord;		// start coordinates
-		coord m_endCoord;		// goal coordinates
-		coord m_maxXY;			// max coordinates
-		node **m_nodeGrid;		// grid of nodes
-		std::vector<node*> m_openSet;	// list of unexplored nodes
-		std::vector<node*> m_optPath;	// optimal path
-		std::vector<coord> m_obstacles;	// obstacles
+		Coord m_startCoord;		// start coordinates
+		Coord m_endCoord;		// goal coordinates
+		Coord m_maxXY;			// max coordinates
+		Node **m_nodeGrid;		// grid of nodes
+		std::vector<Node*> m_openSet;	// list of unexplored nodes
+		std::vector<Node*> m_optPath;	// optimal path
+		std::vector<Coord> m_obstacles;	// obstacles
 };
 
-bool SortByF (const m_map::node *node1, const m_map::node *node2);
+enum POSITION { NORTH = 1, NORTHEAST, EAST, SOUTHEAST, SOUTH, SOUTHWEST, WEST, NORTHWEST };
 

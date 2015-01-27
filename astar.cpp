@@ -6,32 +6,47 @@
 /* Given a JSON file of obstacles, a starting coordinate, and an     */
 /* ending coordinate, output the optimal path to a file using A*.    */
 
-#define VALID_NODE ( (desiredNode.x <= m_maxXY.x && desiredNode.x >= 0) && (desiredNode.y <= m_maxXY.y && desiredNode.y >= 0) )
+static int dynamicMemCounter = 0;
 
 #include"astar.h"
 
 using namespace std;
 
-bool SortByF (const m_map::node *node1, const m_map::node *node2) 
-{ return node1->f > node2->f; }
-
 m_map::m_map()
 {
+	m_startCoord = {0,0};
+	m_endCoord = {0,0};
+	m_maxXY = {0,0};
+	m_nodeGrid = NULL;
+}
 
+m_map::~m_map()
+{
+	for(unsigned int ii=0;ii<m_maxXY.y+1;ii++)
+	{
+		delete [] m_nodeGrid[ii];
+		// Debug counter
+		dynamicMemCounter--;
+	}
+
+	dynamicMemCounter--;
+	delete [] m_nodeGrid;
 }
 
 // Node construct
-m_map::node::node()
+Node::Node()
 {
 	isObstacle = false;
 	isOpenSet = false;
 	isClosedSet = false;
 	g = 0;
+	f = 0;
+	h = 0;
+	parent = NULL;
 }
 
-
 // Initialize the grid for analysis
-bool m_map::m_initGrid(std::string fileString)
+bool m_map::InitMap(std::string fileString)
 {
 	// Hold the entire file in an object
 	Json::Value mapValue;
@@ -46,7 +61,7 @@ bool m_map::m_initGrid(std::string fileString)
 	std::ifstream mapFile(fileString.c_str());
 
 	// Coordinate type to initialize obstacle flags
-	coord curCoord;
+	Coord curCoord;
 
 	if( mapFile.is_open() )
 	{
@@ -61,8 +76,17 @@ bool m_map::m_initGrid(std::string fileString)
 		// File is not formatted correctly
 		catch(std::exception &fileFormat)
 		{
+			MapInitialized = false;
 			return false;
 		} 
+
+		// JSONCPP don't throw exceptions when the file is formatted but doesn't contain the strings indicated
+		if(startValue.size() == 0 || endValue.size() == 0 || obsValue.size() == 0)
+		{
+			MapInitialized = false;
+			return false;
+		}
+
 
 		// Set the start and end coordinates
 		m_startCoord.x = startValue[0].asInt();
@@ -91,16 +115,35 @@ bool m_map::m_initGrid(std::string fileString)
 		}
 	}
 	else
+	{
+		MapInitialized = false;
 		return false;
+	}
 	
 	mapFile.close();
 
 	// Allocate a grid based on the input file
 	// Dynamically allocate the array based on the size in the JSON
 	// New initializes the memory values to zero
-	m_nodeGrid = new node*[m_maxXY.x+1];
+	m_nodeGrid = new Node*[m_maxXY.x+1];
+	dynamicMemCounter++;
+	// Check if grid was allocated successfully
+	if(!m_nodeGrid)
+	{
+		MapInitialized = false;
+		return false;
+	}
+
 	for(int i=0;i<m_maxXY.x+1;++i)
-		m_nodeGrid[i]=new node[m_maxXY.y+1];
+	{
+		dynamicMemCounter++;
+		m_nodeGrid[i]=new Node[m_maxXY.y+1];
+		if(!m_nodeGrid[i])
+		{
+			MapInitialized = false;
+			return false;
+		}
+	}
 
 	for(int ii=0;ii<=m_maxXY.x;ii++)
 	{
@@ -117,9 +160,11 @@ bool m_map::m_initGrid(std::string fileString)
 	}
 
 	// Populate the obstacles vector
-	for(std::vector<coord>::iterator itr = m_obstacles.begin(); itr != m_obstacles.end(); ++itr)
-		m_nodeGrid[(*itr).x][(*itr).y].isObstacle = true;
+	for(std::vector<Coord>::iterator itr = m_obstacles.begin(); itr != m_obstacles.end(); ++itr)
+		m_nodeGrid[itr->x][itr->y].isObstacle = true;
 
+
+	MapInitialized = true;
 	return true;
 
 }
@@ -127,7 +172,7 @@ bool m_map::m_initGrid(std::string fileString)
 // Print out the final optimal path
 void m_map::printPath(std::string fileString)
 {
-	node *curNode = &m_nodeGrid[m_endCoord.x][m_endCoord.y];
+	Node *curNode = &m_nodeGrid[m_endCoord.x][m_endCoord.y];
 
 	// Open an output file
 	ofstream outputFile;
@@ -162,7 +207,7 @@ void m_map::printPath(std::string fileString)
 void m_map::printHeap()
 {
 	cout << "********HEAP********" << endl;
-	for(std::vector<node*>::iterator itr=m_openSet.begin();itr!=m_openSet.end();++itr)
+	for(std::vector<Node*>::iterator itr=m_openSet.begin();itr!=m_openSet.end();++itr)
 	{
 		cout << "X: " << (*itr)->location.x << endl;
 		cout << "Y: " << (*itr)->location.y << endl;
@@ -179,157 +224,164 @@ void m_map::printHeap()
 	cout << endl << endl;
 }
 
-// Manipulate open/closed sets based on node characteristics and map state
-m_map::node* m_map::checkValidNode(int position, node *curNode)
+// Get the movement cost to move to the surrounding node
+Coord m_map::GetLocalMovementCost(int position)
 {
 
-	coord shift;
+	Coord shift;
 	switch(position)
 	{
-		case 1:
+		case NORTH:
 			shift.x = 0;
 			shift.y = 1;
 			break;
-		case 2:
+		case NORTHEAST:
 			shift.x = 1;
 			shift.y = 1;
 			break;
-		case 3:
+		case EAST:
 			shift.x = 1;
 			shift.y = 0;
 			break;
-		case 4:
+		case SOUTHEAST:
 			shift.x = 1;
 			shift.y = -1;
 			break;
-		case 5:
+		case SOUTH:
 			shift.x = 0;
 			shift.y = -1;
 			break;
-		case 6:
+		case SOUTHWEST:
 			shift.x = -1;
 			shift.y = -1;
 			break;
-		case 7:
+		case WEST:
 			shift.x = -1;
 			shift.y = 0;
 			break;
-		case 8:
+		case NORTHWEST:
 			shift.x = -1;
 			shift.y = 1;
 			break;
 	}
 
-	// Coordinate of test
-	coord desiredNode;
-	desiredNode.x = curNode->location.x + shift.x;
-	desiredNode.y = curNode->location.y + shift.y;
+	return shift;
 
-	// Return a null pointer if the node is not valid
-	node *nodePtr = NULL;
-
-	float cost;
-
-	// Check the coordinates are inside the grid and not an obstacle
-	if(VALID_NODE && !m_nodeGrid[desiredNode.x][desiredNode.y].isObstacle)
-	{
-		// Calculate movement cost
-		cost = curNode->g + sqrt(double(shift.x*shift.x + shift.y*shift.y));
-
-		// Movement cost less
-		if(cost < m_nodeGrid[desiredNode.x][desiredNode.y].g )
-		{
-			// In open set
-			if(m_nodeGrid[desiredNode.x][desiredNode.y].isOpenSet)
-			{
-				// Remove neighbor from open set
-				m_nodeGrid[desiredNode.x][desiredNode.y].isOpenSet = false;
-				std::vector<node*>::iterator itr = find(m_openSet.begin(),m_openSet.end(),&m_nodeGrid[desiredNode.x][desiredNode.y]);
-				// Find returns end when the object doesn't exist in vector
-				while( itr != m_openSet.end() )
-				{
-					m_openSet.erase(itr);
-					itr = find(m_openSet.begin(),m_openSet.end(),&m_nodeGrid[desiredNode.x][desiredNode.y]); 	
-				}
-			}
-
-			// In closed set
-			if(m_nodeGrid[desiredNode.x][desiredNode.y].isClosedSet)
-				// Remove neighbor from closed set
-				m_nodeGrid[desiredNode.x][desiredNode.y].isClosedSet = false;
-		}
-		
-		// Not in open or closed set
-		if(!m_nodeGrid[desiredNode.x][desiredNode.y].isOpenSet && !m_nodeGrid[desiredNode.x][desiredNode.y].isClosedSet)
-		{
-			// Calculate A* parameters
-			m_nodeGrid[desiredNode.x][desiredNode.y].g = cost;
-			m_nodeGrid[desiredNode.x][desiredNode.y].f = m_nodeGrid[desiredNode.x][desiredNode.y].g + m_nodeGrid[desiredNode.x][desiredNode.y].h;
-
-			// Add to open set
-			m_nodeGrid[desiredNode.x][desiredNode.y].isOpenSet = true;
-			// Return a valid pointer
-			nodePtr = &m_nodeGrid[desiredNode.x][desiredNode.y];
-			// Set parent to the current node
-			m_nodeGrid[desiredNode.x][desiredNode.y].parent = &m_nodeGrid[curNode->location.x][curNode->location.y];
-		}
-	}
-
-	return nodePtr;
 }
 
-bool m_map::putBestNodeOnBack()
+// Check if the node is in the grid
+bool m_map::NodeIsInsideGrid(Coord coord)
+{
+	return ( (coord.x <= m_maxXY.x && coord.x >= 0) && (coord.y <= m_maxXY.y && coord.y >= 0) );
+}
+
+// Check if the node is an obstacle
+bool m_map::NodeIsObstacle(Coord coord)
+{
+	return m_nodeGrid[coord.x][coord.y].isObstacle;
+}
+
+
+// Check the coordinates are inside the grid and not an obstacle
+bool m_map::NodeIsValid(Coord coord)
+{
+	if( NodeIsInsideGrid(coord) && !NodeIsObstacle(coord) )
+		return true;
+
+	return false;
+}
+
+bool m_map::AddExplorableNodes()
 {
 
 	// Set the current node to the top of the open set
-	node *curNode = m_openSet.back();
+	Node *curNode = m_openSet.back();
+	Coord currentPosition;
+	currentPosition.x = curNode->location.x;
+	currentPosition.y = curNode->location.y;
 
 	// Add the best node to the closed set
 	curNode->isClosedSet = true;
 	curNode->isOpenSet = false;
 
-	// Initialize the possible nodes to be added to the heap
-	std::vector<node> possibleNodes;
+	// Node to hold potential nodes to be added to open set
+	Coord desiredCoord;
 
-	// Cycle through the surrounding nodes
-	for(int ii=1;ii<9;ii++)
-	{ 
-		// Check if node may be placed on heap, toggle heap flag
-		node *desiredNode = checkValidNode(ii,curNode);
-		if (desiredNode )
-		{
-			if(desiredNode->isOpenSet)
-				possibleNodes.push_back(*desiredNode);
-		}
-	}	
+	// Directional movement cost
+	Coord localMovementCost;
 
 	// Pop the current node off the open set
 	m_openSet.pop_back();
 
+	// Cycle through the surrounding nodes
+	for(int ii=NORTH;ii<=NORTHWEST;ii++)
+	{ 
+		// Calculate distance formula for particular directional movement
+		localMovementCost = GetLocalMovementCost(ii);
+		desiredCoord.x = currentPosition.x + localMovementCost.x;
+		desiredCoord.y = currentPosition.y + localMovementCost.y;
+
+		// Node is within bounds of grid and not an obstacle
+		if( NodeIsValid(desiredCoord) )
+			AddNodeToOpenSet(desiredCoord,localMovementCost);
+	}	
+
 	// Run out of nodes to explore, no possible solution
-	if(m_openSet.size() < 1 && possibleNodes.size()<1)
+	if(m_openSet.size() < 1)
 		return false;
 
-	// Add the nodes on the open set
-	for(std::vector<node>::iterator itr = possibleNodes.begin(); itr != possibleNodes.end(); ++itr)
-		m_openSet.push_back(&m_nodeGrid[(*itr).location.x][(*itr).location.y]);
-
-	// Put the lowest movement cost to on the back of open set
-	leastCostToBack();
-	//std::sort( m_openSet.begin(),m_openSet.end(),SortByF );
-	
 	return true;
-	
 }
 
-// Get the path and print it to the screen
-bool m_map::getPath(std::string fileString, std::string outputFileString)
+void m_map::AddNodeToOpenSet(Coord desiredCoord,Coord cost)
+{
+	Coord currentCoord = { desiredCoord.x-cost.x,desiredCoord.y-cost.y };
+	float desiredCost = m_nodeGrid[currentCoord.x][currentCoord.y].g + sqrt(cost.x*cost.x+cost.y*cost.y);
+	Node *desiredNode = &m_nodeGrid[desiredCoord.x][desiredCoord.y];
+
+	if(desiredCost < desiredNode->g)
+	{
+		if( desiredNode->isOpenSet )
+		{
+			// Delete the node from the open set
+			DeleteNodeFromOpenSet(*desiredNode);
+
+			// Update the movement costs and parent
+			desiredNode->g = desiredCost;
+			desiredNode->f = desiredNode->h + desiredNode->g;
+			desiredNode->parent = &m_nodeGrid[currentCoord.x][currentCoord.y];
+
+			// Add the node back to the open set in the updated position
+			InsertNodeInOpenSet(*desiredNode);
+		}
+		// This needs some work
+		if(desiredNode->isClosedSet)
+			// Delete from closed set
+			DeleteNodeFromClosedSet(*desiredNode);
+	}
+
+	if(!desiredNode->isOpenSet && !desiredNode->isClosedSet)
+	{
+		//Update the movement costs and parent
+		desiredNode->g = desiredCost;
+		desiredNode->f = desiredNode->h + desiredNode->g;
+		desiredNode->parent = &m_nodeGrid[currentCoord.x][currentCoord.y];
+
+		InsertNodeInOpenSet(*desiredNode);
+	}
+}
+
+// Get the path
+bool m_map::SolveOptimalPath(std::string fileString, std::string outputFileString)
 {
 	// Initialize the grid
-	if( !m_initGrid(fileString) )
+	if( !MapInitialized )
 	{
-		cout << "Could not open file." << endl;
-		return false;
+		if( !InitMap(fileString) )
+		{
+			cout << "Could not open file." << endl;
+			return false;
+		}
 	}
 
 	// Add the start node to the open list of nodes
@@ -337,13 +389,13 @@ bool m_map::getPath(std::string fileString, std::string outputFileString)
 	m_nodeGrid[m_startCoord.x][m_startCoord.y].isOpenSet = true;
 
 	// Current node is the start node
-	node *curNode = m_openSet.front();
+	Node *curNode = m_openSet.front();
 
 	// Expand nodes until the goal node is reached
 	while( !(curNode->location.x == m_endCoord.x && curNode->location.y == m_endCoord.y) && m_openSet.size()>0)
 	{		
 		// Search around for nodes that you can explore, add appropriate ones to open set
-		if( !putBestNodeOnBack() )
+		if( !AddExplorableNodes() )
 		{
 			cout << "No possible solution." << endl;
 			return false;
@@ -359,67 +411,44 @@ bool m_map::getPath(std::string fileString, std::string outputFileString)
 	// Add the final node to the path
 	m_optPath.push_back(curNode);
 
-	// Delete dynamically allocated memory	
-	cleanMem();
+	// Set the map solved flag
+	MapState = FULL_MAP;
+
+	std::cout << "Mem counter: " << dynamicMemCounter << std::endl;
 
 	return true;
 }
 
-void m_map::cleanMem()
-{
-	// Delete the map object
-	delete m_nodeGrid;
-}
-
-// Move the node with the smallest f value to the back of the open set
-void m_map::leastCostToBack()
-{
-
-	float minF = (*m_openSet.back()).f;
-	std::vector<node*>::iterator minItr = m_openSet.begin();
-
-	for(std::vector<node*>::iterator itr = m_openSet.begin();itr!=m_openSet.end();++itr)
-	{
-		if( (*itr)->f < minF)
-		{
-			minItr = itr;
-			minF = (*itr)->f;
-		}	
-	}
-
-	std::iter_swap(m_openSet.end()-1,minItr);	
-}
-
 // Copy make to an object for GUI purposes
-std::vector<m_map::coord> m_map::copyObstacles()
+std::vector<Coord> m_map::copyObstacles()
 {
 	return m_obstacles;
 }
 
 // Copy make to an object for GUI purposes
-m_map::coord m_map::copyMaxCoord()
+Coord m_map::copyMaxCoord()
 {
 	return m_maxXY;
 }
 
 // Copy make to an object for GUI purposes
-m_map::coord m_map::copyEndCoord()
+Coord m_map::copyEndCoord()
 {
 	return m_endCoord;
 }
 
 // Copy make to an object for GUI purposes
-m_map::coord m_map::copyStartCoord()
+Coord m_map::copyStartCoord()
 {
 	return m_startCoord;
 }
 
-std::vector<m_map::coord> m_map::copyOptPath()
+std::vector<Coord> m_map::copyOptPath()
 {
-	std::vector<coord> vecOptPath;
-	coord curCoord;
+	std::vector<Coord> vecOptPath;
+	Coord curCoord;
 
-	for(std::vector<node*>::iterator itr=m_optPath.begin();itr!=m_optPath.end();++itr)
+	for(std::vector<Node*>::iterator itr=m_optPath.begin();itr!=m_optPath.end();++itr)
 	{
 		curCoord.x = (*itr)->location.x;
 		curCoord.y = (*itr)->location.y;
@@ -429,3 +458,113 @@ std::vector<m_map::coord> m_map::copyOptPath()
 	return vecOptPath;
 }
 
+void m_map::DeleteNodeFromOpenSet(Node &n)
+{
+	if(n.isOpenSet)
+	{
+		// Remove the desired node from open set
+		n.isOpenSet = false;
+
+		/* DEBUG TIMER TO SEE IF EXTRA FIELD IS WORTH IT */
+		timeval t1,t2;
+		gettimeofday(&t1,NULL);
+
+		std::vector<Node*>::iterator itr = find(m_openSet.begin(),m_openSet.end(),&n);
+		// Find returns end when the object doesn't exist in vector
+		while( itr != m_openSet.end() )
+		{
+			m_openSet.erase(itr);
+			itr = find(m_openSet.begin(),m_openSet.end(),&n);
+		}
+		gettimeofday(&t2,NULL);
+
+		std::cout << "Node found in: " << (double)t2.tv_sec-(double)t1.tv_sec+((double)t2.tv_usec)/1e6-((double)t1.tv_usec/1e6) << " seconds";
+		std::cout << std::endl;
+	}
+}
+
+void m_map::DeleteNodeFromClosedSet(Node &n)
+{
+	n.isClosedSet = false;
+}
+
+void m_map::InsertNodeInOpenSet(Node &n)
+{
+	// Already on the open set, just update the value and position
+	if(n.isOpenSet)
+		return;
+	//
+	else
+	{
+		m_openSet.insert(m_openSet.begin()+FindOpenSetPosition(n),&n);
+		n.isOpenSet = true;
+	}
+}
+
+// Pseudo binary search for where the node should be inserted in the open set
+int m_map::FindOpenSetPosition(Node n)
+{
+	int upperBoundIdx = m_openSet.size() / 2;
+	int lowerBoundIdx = upperBoundIdx - 1;
+	int currentInterval = m_openSet.size() / 2;
+
+	//int counter = 0;
+
+	if( m_openSet.size() <= 0 )
+		return 0;
+
+	if( lowerBoundIdx <= 0)
+	{
+		if(n.f > m_openSet.at(0)->f)
+			return 0;
+		else
+			return 1;
+	}
+
+	if( upperBoundIdx >= m_openSet.size()-1 )
+	{
+		if(n.f < m_openSet.at(m_openSet.size()-1)->f)
+			return m_openSet.size();
+		else
+			return m_openSet.size()-1;
+	}
+
+	while( !(n.f >= m_openSet.at(upperBoundIdx)->f && n.f <= m_openSet.at(lowerBoundIdx)->f) )
+	{
+		//counter++;
+		//std::cout << "Counter: " << counter << std::endl;
+
+		currentInterval /= 2;
+		if( currentInterval <= 0 )
+			currentInterval = 1;
+
+		if( n.f > m_openSet.at(lowerBoundIdx)->f )
+		{
+			lowerBoundIdx -= currentInterval;
+			upperBoundIdx -= currentInterval;
+		}
+		else if( n.f < m_openSet.at(upperBoundIdx)->f )
+		{
+			lowerBoundIdx += currentInterval;
+			upperBoundIdx += currentInterval;
+		}
+
+		if( lowerBoundIdx <= 0)
+		{
+			if(n.f > m_openSet.at(0)->f)
+				return 0;
+			else
+				return 1;
+		}
+
+		if( upperBoundIdx >= m_openSet.size()-1 )
+		{
+			if(n.f < m_openSet.at(m_openSet.size()-1)->f)
+				return m_openSet.size();
+			else
+				return m_openSet.size()-1;
+		}
+	}
+
+	return upperBoundIdx;
+}

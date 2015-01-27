@@ -1,26 +1,7 @@
  #include "menuwindow.h"
 #include <iostream>
 #include <sys/time.h>
-
-MenuWindow::MenuWindow()
-: m_ButtonBox(Gtk::ORIENTATION_VERTICAL),
-  m_Button_File("Choose File")
-{
-	set_title("Astar");
-
-	m_ButtonBox.pack_start(m_Button_File);
-	m_Button_File.signal_clicked().connect(sigc::mem_fun(*this,
-	      &MenuWindow::on_button_file_clicked) );
-
-	add(m_ButtonBox);
-	m_ButtonBox.show();
-	m_Button_File.show();
-	//show_all_children();
-}
-
-MenuWindow::~MenuWindow()
-{
-}
+#include <gtkmm/box.h>
 
 MapDrawArea::~MapDrawArea()
 {
@@ -28,117 +9,56 @@ MapDrawArea::~MapDrawArea()
 
 MapDrawArea::MapDrawArea()
 {
+	guiMapData.MapState = UNINITIALIZED;
 }
 
-MenuWindow::MapWindow::MapWindow()
-: m_draw()
-{
-  
-}
-
-MenuWindow::MapWindow::MapWindow(const MenuWindow &e)
-: m_draw()
+MapWindow::MapWindow()
+: m_draw(),
+  m_VertParentBox(Gtk::ORIENTATION_VERTICAL),
+  m_HorzChildBox(Gtk::ORIENTATION_HORIZONTAL),
+  m_Button_File("Choose file..."),
+  m_Button_Solve("Solve path...")
 {
 	// Set title, maximize window
-	set_title(e.inputFilename);
+	set_title("Astar");
 	maximize();
 
-	// Start timer
-	timeval t1,t2;
-	gettimeofday(&t1,NULL);
+	m_Button_File.signal_clicked().connect(sigc::mem_fun(*this,
+		  &MapWindow::on_button_file_clicked) );
 
-	// Solve the path
-	bool result = m_draw.guiMapData.getPath( e.inputFilename.c_str(), e.outputFilename.c_str() );
+	m_Button_Solve.signal_clicked().connect(sigc::mem_fun(*this,
+			  &MapWindow::on_button_solve_clicked) );
 
-	// Stop timer
-	gettimeofday(&t2,NULL);
+	add(m_VertParentBox);
 
-	// Print solving time only when the map was solved
-	std::stringstream messageString;
-	if(result)
-		messageString << "Map successfully solved in: " << (double)t2.tv_sec-(double)t1.tv_sec+((double)t2.tv_usec)/1e6-((double)t1.tv_usec/1e6) << " seconds";
-	// Map not solvable
-	else
-	{
-		messageString << "There is no possible path for the robot to reach the given goal coordinate from the given start coordinate. Please check your map file.";
-	}
+	m_VertParentBox.show();
 
-	// Popup message dialog
-	Gtk::MessageDialog dlg( messageString.str() );
-	dlg.run();
+	m_HorzChildBox.pack_end(m_Button_File,false,false,0);
+	m_VertParentBox.pack_start(m_HorzChildBox,false,false,10);
 
-	// Drawing area for the map
-	add(m_draw);
+	m_VertParentBox.pack_start(m_draw);
+	m_HorzChildBox.pack_end(m_Button_Solve,false,false,0);
 
 	// Show
 	show_all_children();
 }
 
-
-
-MenuWindow::MapWindow::~MapWindow()
+bool MapWindow::SolveOptimalPath()
 {
-}
-
-// Handler for popup dialog
-void MenuWindow::on_button_file_clicked()
-{
-	Gtk::FileChooserDialog dialog("Please choose a file",
-	  Gtk::FILE_CHOOSER_ACTION_OPEN);
-	dialog.set_transient_for(*this);
-
-	//Add response buttons the the dialog:
-	dialog.add_button("_Cancel", Gtk::RESPONSE_CANCEL);
-	dialog.add_button("_Open", Gtk::RESPONSE_OK);
-
-	//Add filters, so that only certain file types can be selected:
-
-	Glib::RefPtr<Gtk::FileFilter> filter_text = Gtk::FileFilter::create();
-	filter_text->set_name("Text/Data files");
-	filter_text->add_mime_type("text/plain");
-	dialog.add_filter(filter_text);
-
-	Glib::RefPtr<Gtk::FileFilter> filter_any = Gtk::FileFilter::create();
-	filter_any->set_name("Any files");
-	filter_any->add_pattern("*");
-	dialog.add_filter(filter_any);
-
-	//Show the dialog and wait for a user response:
-	int result = dialog.run();
-	//dialog.hide();
-
-	//Handle the response:
-	switch(result)
+	timeval t1,t2;
+	gettimeofday(&t1,NULL);
+	bool result = m_draw.guiMapData.SolveOptimalPath( inputFilename.c_str(), outputFilename.c_str() );
+	gettimeofday(&t2,NULL);
+	if(result)
 	{
-		case(Gtk::RESPONSE_OK):
-		{
-
-			//Notice that this is a std::string, not a Glib::ustring.
-			// Need to pass this to the astar algorithm
-			inputFilename = dialog.get_filename();
-			outputFilename = inputFilename + ".out";
-
-			// Create child window and plot obstacles
-			MapWindow *popupWin = new MapWindow(*this);
-			popupWin->show();
-
-			break;
-		}
-		/*case(Gtk::RESPONSE_CANCEL):
-		{
-			std::cout << "Cancel clicked." << std::endl;
-			break;
-		}*/
-		default:
-		{
-			std::cout << "Unexpected button clicked." << std::endl;
-			break;
-		}
+		std::cout << "Map successfully solved in: " << (double)t2.tv_sec-(double)t1.tv_sec+((double)t2.tv_usec)/1e6-((double)t1.tv_usec/1e6) << " seconds";
+		std::cout << std::endl;
 	}
+
+	return result;
 }
 
-// Draw the obstacles, start point, end point, final path
-bool MapDrawArea::on_draw(const Cairo::RefPtr<Cairo::Context>& cr)
+void MapDrawArea::DrawObstacles(const Cairo::RefPtr<Cairo::Context>& cr)
 {
 	// This is where we draw on the window
 	Gtk::Allocation allocation = get_allocation();
@@ -148,11 +68,10 @@ bool MapDrawArea::on_draw(const Cairo::RefPtr<Cairo::Context>& cr)
 
 	// We should be able to just store the obstacles and path once
 	// Do need to update based on the window size
-	const std::vector<m_map::coord> vObstacles = guiMapData.copyObstacles();
-	const std::vector<m_map::coord> optimalPath = guiMapData.copyOptPath();
-	const m_map::coord maxXY = guiMapData.copyMaxCoord();
-	m_map::coord originCoord = guiMapData.copyStartCoord();
-	m_map::coord goalCoord = guiMapData.copyEndCoord();
+	const std::vector<Coord> vObstacles = guiMapData.m_obstacles;
+	const Coord maxXY = guiMapData.m_maxXY;
+	Coord originCoord = guiMapData.m_startCoord;
+	Coord goalCoord = guiMapData.m_endCoord;
 
 	// These have to be updated each iteration
 	originCoord.x = int( float(width)*float(originCoord.x)/float(maxXY.x) );
@@ -160,16 +79,15 @@ bool MapDrawArea::on_draw(const Cairo::RefPtr<Cairo::Context>& cr)
 	goalCoord.x = int( float(width)*float(goalCoord.x)/float(maxXY.x) );
 	goalCoord.y = int( float(height)*float(goalCoord.y)/float(maxXY.y) );
 
-
 	// Draw obstacles
-	std::vector<m_map::coord> scaledObsCoord;
-	m_map::coord stdCoord;
+	std::vector<Coord> scaledObsCoord;
+	Coord stdCoord;
 
 	// Adjust obstacle values based on window size
-	for(std::vector<m_map::coord>::const_iterator itr=vObstacles.begin();itr!=vObstacles.end();++itr)
+	for(std::vector<Coord>::const_iterator itr=guiMapData.m_obstacles.begin();itr!=guiMapData.m_obstacles.end();++itr)
 	{
-		stdCoord.x = int( float(width)*float((*itr).x)/float(maxXY.x) );
-		stdCoord.y = int( height*float((*itr).y)/float(maxXY.y) );
+		stdCoord.x = int( float(width)*float(itr->x)/float(maxXY.x) );
+		stdCoord.y = int( height*float(itr->y)/float(maxXY.y) );
 		scaledObsCoord.push_back(stdCoord);
 	}
 
@@ -179,10 +97,10 @@ bool MapDrawArea::on_draw(const Cairo::RefPtr<Cairo::Context>& cr)
 	cr->set_line_cap(Cairo::LINE_CAP_ROUND);
 
 	// Plot obstacles
-	for(std::vector<m_map::coord>::iterator itr=scaledObsCoord.begin();itr != scaledObsCoord.end();++itr)
+	for(std::vector<Coord>::iterator itr=scaledObsCoord.begin();itr != scaledObsCoord.end();++itr)
 	{
-		cr->move_to( (*itr).x,(*itr).y );
-		cr->line_to( (*itr).x,(*itr).y );
+		cr->move_to( itr->x,itr->y );
+		cr->line_to( itr->x,itr->y );
 		cr->stroke();
 	}
 
@@ -198,18 +116,120 @@ bool MapDrawArea::on_draw(const Cairo::RefPtr<Cairo::Context>& cr)
 	cr->move_to( goalCoord.x,goalCoord.y );
 	cr->line_to( goalCoord.x,goalCoord.y );
 	cr->stroke();
+}
+
+void MapDrawArea::DrawOptimalPath(const Cairo::RefPtr<Cairo::Context>& cr)
+{
+	// This is where we draw on the window
+	Gtk::Allocation allocation = get_allocation();
+	const int width = allocation.get_width();
+	const int height = allocation.get_height();
+	const int lesser = MIN(width, height);
+	const Coord maxXY = guiMapData.m_maxXY;
+
+	const std::vector<Node*> optimalPath = guiMapData.m_optPath;
 
 	// Plot the path
 	cr->save();
 	cr->set_source_rgb(1.0, 0.08, 0.58);	// pink for path
 	cr->set_line_width(lesser * 0.005);
+	cr->set_line_cap(Cairo::LINE_CAP_ROUND);
 
-	for(std::vector<m_map::coord>::const_iterator itr=optimalPath.begin();itr != optimalPath.end();++itr)
+	for(std::vector<Node*>::const_iterator itr=optimalPath.begin();itr != optimalPath.end();++itr)
 	{
-		cr->move_to( int( float(width)*float((*itr).x)/float(maxXY.x) ),int( height*float((*itr).y)/float(maxXY.y) ));
-		cr->line_to( int( float(width)*float((*itr).x)/float(maxXY.x) ),int( height*float((*itr).y)/float(maxXY.y) ) );
+		cr->move_to( int( float(width)*float((*itr)->location.x)/float(maxXY.x) ),int( height*float((*itr)->location.y)/float(maxXY.y)));
+		cr->line_to( int( float(width)*float((*itr)->location.x)/float(maxXY.x) ),int( height*float((*itr)->location.y)/float(maxXY.y)));
 		cr->stroke();
+	}
+}
+
+void MapDrawArea::ClearDrawingArea(const Cairo::RefPtr<Cairo::Context>& cr)
+{
+	cr->set_source_rgb(255,255,255);
+	cr->paint();
+}
+
+MapWindow::~MapWindow()
+{
+}
+
+// Handler for popup dialog
+void MapWindow::on_button_file_clicked()
+{
+	Gtk::FileChooserDialog dialog("Please choose a file",
+	  Gtk::FILE_CHOOSER_ACTION_OPEN);
+	dialog.set_transient_for(*this);
+
+	//Add response buttons the the dialog:
+	dialog.add_button("_Cancel", Gtk::RESPONSE_CANCEL);
+	dialog.add_button("_Open", Gtk::RESPONSE_OK);
+
+	//Add filters, so that only certain file types can be selected:
+	Glib::RefPtr<Gtk::FileFilter> filter_text = Gtk::FileFilter::create();
+	filter_text->set_name("Text/Data files");
+	filter_text->add_mime_type("text/plain");
+	dialog.add_filter(filter_text);
+
+	Glib::RefPtr<Gtk::FileFilter> filter_any = Gtk::FileFilter::create();
+	filter_any->set_name("Any files");
+	filter_any->add_pattern("*");
+	dialog.add_filter(filter_any);
+
+	//Show the dialog and wait for a user response:
+	int result = dialog.run();
+
+	m_draw.guiMapData.MapState = UNINITIALIZED;
+
+	//Handle the response:
+	switch(result)
+	{
+		case(Gtk::RESPONSE_OK):
+		{
+
+			//Notice that this is a std::string, not a Glib::ustring.
+			// Need to pass this to the astar algorithm
+			inputFilename = dialog.get_filename().c_str();
+			outputFilename = inputFilename + ".out";
+			outputFilename = outputFilename.c_str();
+			m_draw.guiMapData.InitMap(inputFilename);
+			if(m_draw.guiMapData.MapInitialized)
+				m_draw.guiMapData.MapState = OBSTACLES_ONLY;
+			else
+				m_draw.guiMapData.MapState = UNINITIALIZED;
+
+			break;
+		}
+
+		default:
+		{
+			std::cout << "No file selected." << std::endl;
+			break;
+		}
+	}
+}
+
+void MapWindow::on_button_solve_clicked()
+{
+	SolveOptimalPath();
+}
+
+// Draw the obstacles, start point, end point, final path
+bool MapDrawArea::on_draw(const Cairo::RefPtr<Cairo::Context>& cr)
+{
+	switch(guiMapData.MapState)
+	{
+		case UNINITIALIZED:
+			ClearDrawingArea(cr);
+			break;
+		case OBSTACLES_ONLY:
+			DrawObstacles(cr);
+			break;
+		case FULL_MAP:
+			DrawObstacles(cr);
+			DrawOptimalPath(cr);
+			break;
 	}
 
 	return true;
 }
+
