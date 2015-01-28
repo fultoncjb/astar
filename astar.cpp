@@ -6,7 +6,8 @@
 /* Given a JSON file of obstacles, a starting coordinate, and an     */
 /* ending coordinate, output the optimal path to a file using A*.    */
 
-static int dynamicMemCounter = 0;
+// Debugging for diagnosing memory leaks
+//static int dynamicMemCounter = 0;
 
 #include"astar.h"
 
@@ -22,15 +23,6 @@ m_map::m_map()
 
 m_map::~m_map()
 {
-	for(unsigned int ii=0;ii<m_maxXY.y+1;ii++)
-	{
-		delete [] m_nodeGrid[ii];
-		// Debug counter
-		dynamicMemCounter--;
-	}
-
-	dynamicMemCounter--;
-	delete [] m_nodeGrid;
 }
 
 // Node construct
@@ -124,9 +116,8 @@ bool m_map::InitMap(std::string fileString)
 
 	// Allocate a grid based on the input file
 	// Dynamically allocate the array based on the size in the JSON
-	// New initializes the memory values to zero
 	m_nodeGrid = new Node*[m_maxXY.x+1];
-	dynamicMemCounter++;
+	//dynamicMemCounter++;
 	// Check if grid was allocated successfully
 	if(!m_nodeGrid)
 	{
@@ -136,7 +127,7 @@ bool m_map::InitMap(std::string fileString)
 
 	for(int i=0;i<m_maxXY.x+1;++i)
 	{
-		dynamicMemCounter++;
+		//dynamicMemCounter++;
 		m_nodeGrid[i]=new Node[m_maxXY.y+1];
 		if(!m_nodeGrid[i])
 		{
@@ -170,9 +161,10 @@ bool m_map::InitMap(std::string fileString)
 }
 
 // Print out the final optimal path
-void m_map::printPath(std::string fileString)
+void m_map::WritePathToFile(std::string fileString)
 {
 	Node *curNode = &m_nodeGrid[m_endCoord.x][m_endCoord.y];
+	Coord currentCoord = m_endCoord;
 
 	// Open an output file
 	ofstream outputFile;
@@ -184,7 +176,8 @@ void m_map::printPath(std::string fileString)
 
 		while( !(curNode->location.x == m_startCoord.x && curNode->location.y == m_startCoord.y) )
 		{
-			m_optPath.push_back(curNode);
+			currentCoord = { curNode->location.x,curNode->location.y };
+			m_optPath.push_back(currentCoord);
 			outputFile << "X: " << curNode->location.x << endl;
 			outputFile << "Y: " << curNode->location.y << endl;
 			outputFile << "F: " << curNode->f << endl;
@@ -194,7 +187,7 @@ void m_map::printPath(std::string fileString)
 	}
 
 	// Print out the starting node
-	m_optPath.push_back(curNode);
+	m_optPath.push_back(currentCoord);
 	outputFile << "X: " << curNode->location.x << endl;
 	outputFile << "Y: " << curNode->location.y << endl;
 	outputFile << "F: " << curNode->f << endl;
@@ -406,15 +399,20 @@ bool m_map::SolveOptimalPath(std::string fileString, std::string outputFileStrin
 	}
 
 	// Write output to file
-	printPath(outputFileString);
+	WritePathToFile(outputFileString);
 
 	// Add the final node to the path
-	m_optPath.push_back(curNode);
+	Coord currentCoord = { curNode->location.x,curNode->location.y };
+	m_optPath.push_back(currentCoord);
 
 	// Set the map solved flag
 	MapState = FULL_MAP;
 
-	std::cout << "Mem counter: " << dynamicMemCounter << std::endl;
+	// Delete the node grid
+	DeleteNodeGrid();
+
+	// Open set no longer needed
+	DeleteOpenSet();
 
 	return true;
 }
@@ -445,17 +443,7 @@ Coord m_map::copyStartCoord()
 
 std::vector<Coord> m_map::copyOptPath()
 {
-	std::vector<Coord> vecOptPath;
-	Coord curCoord;
-
-	for(std::vector<Node*>::iterator itr=m_optPath.begin();itr!=m_optPath.end();++itr)
-	{
-		curCoord.x = (*itr)->location.x;
-		curCoord.y = (*itr)->location.y;
-		vecOptPath.push_back(curCoord);
-	}
-
-	return vecOptPath;
+	return m_optPath;
 }
 
 void m_map::DeleteNodeFromOpenSet(Node &n)
@@ -466,8 +454,8 @@ void m_map::DeleteNodeFromOpenSet(Node &n)
 		n.isOpenSet = false;
 
 		/* DEBUG TIMER TO SEE IF EXTRA FIELD IS WORTH IT */
-		timeval t1,t2;
-		gettimeofday(&t1,NULL);
+		//timeval t1,t2;
+		//gettimeofday(&t1,NULL);
 
 		std::vector<Node*>::iterator itr = find(m_openSet.begin(),m_openSet.end(),&n);
 		// Find returns end when the object doesn't exist in vector
@@ -476,10 +464,10 @@ void m_map::DeleteNodeFromOpenSet(Node &n)
 			m_openSet.erase(itr);
 			itr = find(m_openSet.begin(),m_openSet.end(),&n);
 		}
-		gettimeofday(&t2,NULL);
+		//gettimeofday(&t2,NULL);
 
-		std::cout << "Node found in: " << (double)t2.tv_sec-(double)t1.tv_sec+((double)t2.tv_usec)/1e6-((double)t1.tv_usec/1e6) << " seconds";
-		std::cout << std::endl;
+		//std::cout << "Node found in: " << (double)t2.tv_sec-(double)t1.tv_sec+((double)t2.tv_usec)/1e6-((double)t1.tv_usec/1e6) << " seconds";
+		//std::cout << std::endl;
 	}
 }
 
@@ -567,4 +555,36 @@ int m_map::FindOpenSetPosition(Node n)
 	}
 
 	return upperBoundIdx;
+}
+
+// Delete the dynamically allocated node grid
+void m_map::DeleteNodeGrid()
+{
+	for(unsigned int ii=0;ii<m_maxXY.x+1;ii++)
+	{
+		delete [] m_nodeGrid[ii];
+		// Debug counter
+		//dynamicMemCounter--;
+		/* DEBUG */
+		//std::cout << "Mem counter: " << dynamicMemCounter << " " << "Itr: " << ii << std::endl;
+	}
+
+	//dynamicMemCounter--;
+	delete [] m_nodeGrid;
+	//std::cout << "Mem counter 2: " << dynamicMemCounter << std::endl;
+
+	m_nodeGrid = NULL;
+}
+
+// Delete the open set
+void m_map::DeleteOpenSet()
+{
+	m_openSet.clear();
+}
+
+// Clear the map of the obstacles and the optimal path
+void m_map::ClearMap()
+{
+	m_obstacles.clear();
+	m_optPath.clear();
 }

@@ -1,4 +1,4 @@
- #include "menuwindow.h"
+#include "menuwindow.h"
 #include <iostream>
 #include <sys/time.h>
 #include <gtkmm/box.h>
@@ -23,6 +23,9 @@ MapWindow::MapWindow()
 	set_title("Astar");
 	maximize();
 
+	// Set the minimum window size
+	set_size_request(400,300);
+
 	m_Button_File.signal_clicked().connect(sigc::mem_fun(*this,
 		  &MapWindow::on_button_file_clicked) );
 
@@ -33,11 +36,11 @@ MapWindow::MapWindow()
 
 	m_VertParentBox.show();
 
-	m_HorzChildBox.pack_end(m_Button_File,false,false,0);
+	m_HorzChildBox.pack_end(m_Button_File,Gtk::PACK_EXPAND_PADDING,0);
 	m_VertParentBox.pack_start(m_HorzChildBox,false,false,10);
 
 	m_VertParentBox.pack_start(m_draw);
-	m_HorzChildBox.pack_end(m_Button_Solve,false,false,0);
+	m_HorzChildBox.pack_end(m_Button_Solve,Gtk::PACK_EXPAND_PADDING,0);
 
 	// Show
 	show_all_children();
@@ -68,10 +71,10 @@ void MapDrawArea::DrawObstacles(const Cairo::RefPtr<Cairo::Context>& cr)
 
 	// We should be able to just store the obstacles and path once
 	// Do need to update based on the window size
-	const std::vector<Coord> vObstacles = guiMapData.m_obstacles;
-	const Coord maxXY = guiMapData.m_maxXY;
-	Coord originCoord = guiMapData.m_startCoord;
-	Coord goalCoord = guiMapData.m_endCoord;
+	const std::vector<Coord> vObstacles = guiMapData.copyObstacles();
+	const Coord maxXY = guiMapData.copyMaxCoord();
+	Coord originCoord = guiMapData.copyStartCoord();
+	Coord goalCoord = guiMapData.copyEndCoord();
 
 	// These have to be updated each iteration
 	originCoord.x = int( float(width)*float(originCoord.x)/float(maxXY.x) );
@@ -80,15 +83,16 @@ void MapDrawArea::DrawObstacles(const Cairo::RefPtr<Cairo::Context>& cr)
 	goalCoord.y = int( float(height)*float(goalCoord.y)/float(maxXY.y) );
 
 	// Draw obstacles
-	std::vector<Coord> scaledObsCoord;
+	std::vector<Coord> scaledObstacleCoord;
+	std::vector<Coord> rawObstacleCoord = guiMapData.copyObstacles();
 	Coord stdCoord;
 
 	// Adjust obstacle values based on window size
-	for(std::vector<Coord>::const_iterator itr=guiMapData.m_obstacles.begin();itr!=guiMapData.m_obstacles.end();++itr)
+	for(std::vector<Coord>::const_iterator itr=rawObstacleCoord.begin();itr!=rawObstacleCoord.end();++itr)
 	{
 		stdCoord.x = int( float(width)*float(itr->x)/float(maxXY.x) );
 		stdCoord.y = int( height*float(itr->y)/float(maxXY.y) );
-		scaledObsCoord.push_back(stdCoord);
+		scaledObstacleCoord.push_back(stdCoord);
 	}
 
 	cr->save();
@@ -97,7 +101,7 @@ void MapDrawArea::DrawObstacles(const Cairo::RefPtr<Cairo::Context>& cr)
 	cr->set_line_cap(Cairo::LINE_CAP_ROUND);
 
 	// Plot obstacles
-	for(std::vector<Coord>::iterator itr=scaledObsCoord.begin();itr != scaledObsCoord.end();++itr)
+	for(std::vector<Coord>::iterator itr=scaledObstacleCoord.begin();itr != scaledObstacleCoord.end();++itr)
 	{
 		cr->move_to( itr->x,itr->y );
 		cr->line_to( itr->x,itr->y );
@@ -125,9 +129,10 @@ void MapDrawArea::DrawOptimalPath(const Cairo::RefPtr<Cairo::Context>& cr)
 	const int width = allocation.get_width();
 	const int height = allocation.get_height();
 	const int lesser = MIN(width, height);
-	const Coord maxXY = guiMapData.m_maxXY;
+	const Coord maxXY = guiMapData.copyMaxCoord();
 
-	const std::vector<Node*> optimalPath = guiMapData.m_optPath;
+	// Copy the optimal path to the draw area
+	std::vector<Coord> optimalPath = guiMapData.copyOptPath();
 
 	// Plot the path
 	cr->save();
@@ -135,10 +140,10 @@ void MapDrawArea::DrawOptimalPath(const Cairo::RefPtr<Cairo::Context>& cr)
 	cr->set_line_width(lesser * 0.005);
 	cr->set_line_cap(Cairo::LINE_CAP_ROUND);
 
-	for(std::vector<Node*>::const_iterator itr=optimalPath.begin();itr != optimalPath.end();++itr)
+	for(std::vector<Coord>::iterator itr=optimalPath.begin();itr != optimalPath.end();++itr)
 	{
-		cr->move_to( int( float(width)*float((*itr)->location.x)/float(maxXY.x) ),int( height*float((*itr)->location.y)/float(maxXY.y)));
-		cr->line_to( int( float(width)*float((*itr)->location.x)/float(maxXY.x) ),int( height*float((*itr)->location.y)/float(maxXY.y)));
+		cr->move_to( int( float(width)*float(itr->x)/float(maxXY.x) ),int( height*float(itr->y)/float(maxXY.y)));
+		cr->line_to( int( float(width)*float(itr->x)/float(maxXY.x) ),int( height*float(itr->y)/float(maxXY.y)));
 		cr->stroke();
 	}
 }
@@ -185,7 +190,8 @@ void MapWindow::on_button_file_clicked()
 	{
 		case(Gtk::RESPONSE_OK):
 		{
-
+			// Clear out the obstacles and optimal path
+			m_draw.guiMapData.ClearMap();
 			//Notice that this is a std::string, not a Glib::ustring.
 			// Need to pass this to the astar algorithm
 			inputFilename = dialog.get_filename().c_str();
@@ -210,7 +216,20 @@ void MapWindow::on_button_file_clicked()
 
 void MapWindow::on_button_solve_clicked()
 {
-	SolveOptimalPath();
+	if(m_draw.guiMapData.MapState == FULL_MAP)
+	{
+		return;
+	}
+
+	if( SolveOptimalPath() )
+		m_draw.queue_draw();
+	else
+	{
+		// Invalid file selected
+		Gtk::MessageDialog diagBox("Invalid file selected.");
+		diagBox.set_title("Invalid File");
+		diagBox.run();
+	}
 }
 
 // Draw the obstacles, start point, end point, final path

@@ -43,12 +43,8 @@ struct Node{
 // Full map of explorable nodes
 class m_map{
 	public:
-
-		// Allow windows access to private/protected members
-		friend class MapDrawArea;
-
 		m_map();
-		void printPath(std::string fileString);
+		void WritePathToFile(std::string fileString);
 		void printHeap();
 		bool SolveOptimalPath(std::string fileString, std::string outputFileString);
 		std::vector<Coord> copyObstacles();
@@ -59,6 +55,7 @@ class m_map{
 		state MapState;
 		bool MapInitialized;
 		bool InitMap(std::string fileString);
+		void ClearMap();
 
 		~m_map();
 	protected:
@@ -69,11 +66,12 @@ class m_map{
 		void AddNodeToOpenSet(Coord desiredCoord,Coord cost);
 		void InsertNodeInOpenSet(Node &n);
 		int FindOpenSetPosition(Node n);
-
 		Coord GetLocalMovementCost(int position);
 		bool NodeIsInsideGrid(Coord coord);
 		bool NodeIsValid(Coord coord);
 		bool NodeIsObstacle(Coord coord);
+		void DeleteNodeGrid();
+		void DeleteOpenSet();
 
 		// Data objects
 		Coord m_startCoord;		// start coordinates
@@ -81,7 +79,7 @@ class m_map{
 		Coord m_maxXY;			// max coordinates
 		Node **m_nodeGrid;		// grid of nodes
 		std::vector<Node*> m_openSet;	// list of unexplored nodes
-		std::vector<Node*> m_optPath;	// optimal path
+		std::vector<Coord> m_optPath;	// optimal path
 		std::vector<Coord> m_obstacles;	// obstacles
 };
 
