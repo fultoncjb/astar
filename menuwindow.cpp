@@ -19,6 +19,9 @@ MapWindow::MapWindow()
   m_Button_File("Choose file..."),
   m_Button_Solve("Solve path...")
 {
+	// Add a buffer border to the window
+	set_border_width(10);
+
 	// Set title, maximize window
 	set_title("Astar");
 	maximize();
@@ -31,6 +34,8 @@ MapWindow::MapWindow()
 
 	m_Button_Solve.signal_clicked().connect(sigc::mem_fun(*this,
 			  &MapWindow::on_button_solve_clicked) );
+
+	m_Button_Solve.set_sensitive(false);
 
 	add(m_VertParentBox);
 
@@ -199,7 +204,10 @@ void MapWindow::on_button_file_clicked()
 			outputFilename = outputFilename.c_str();
 			m_draw.guiMapData.InitMap(inputFilename);
 			if(m_draw.guiMapData.MapInitialized)
+			{
 				m_draw.guiMapData.MapState = OBSTACLES_ONLY;
+				m_Button_Solve.set_sensitive(true);
+			}
 			else
 				m_draw.guiMapData.MapState = UNINITIALIZED;
 
@@ -222,7 +230,10 @@ void MapWindow::on_button_solve_clicked()
 	}
 
 	if( SolveOptimalPath() )
+	{
 		m_draw.queue_draw();
+		m_Button_Solve.set_sensitive(false);
+	}
 	else
 	{
 		// Invalid file selected

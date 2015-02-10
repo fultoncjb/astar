@@ -1,8 +1,8 @@
 /*********************************************************************/
 /************************ Cameron Fulton *****************************/
-/************************ Copyright 2014 *****************************/
+/************************ Copyright 2015 *****************************/
 /*********************************************************************/
-/************************** astar.cpp    *****************************/
+/*************************   astar.cpp   *****************************/
 /* Given a JSON file of obstacles, a starting coordinate, and an     */
 /* ending coordinate, output the optimal path to a file using A*.    */
 
@@ -37,7 +37,13 @@ Node::Node()
 	parent = NULL;
 }
 
-// Initialize the grid for analysis
+// ----------------------------------------------------------- //
+// --------------------------InitMap-------------------------- //
+// Description: read a JSON file with robotStart, robotEnd,    //
+// and obstacles. Allocate m_nodeGrid on the heap. Initialize  //
+// nodes. Return false if the file does not contain the JSON   //
+// objects.                                                    //
+// ----------------------------------------------------------- //
 bool m_map::InitMap(std::string fileString)
 {
 	// Hold the entire file in an object
@@ -79,7 +85,6 @@ bool m_map::InitMap(std::string fileString)
 			return false;
 		}
 
-
 		// Set the start and end coordinates
 		m_startCoord.x = startValue[0].asInt();
 		m_startCoord.y = startValue[1].asInt();
@@ -92,7 +97,7 @@ bool m_map::InitMap(std::string fileString)
 		if(m_endCoord.y > m_maxXY.y)
 			m_maxXY.y = m_endCoord.y;
 
-		// Iterate through the obstacles
+		// Populate the obstacles vector
 		for(Json::ValueIterator itr = obsValue.begin(); itr != obsValue.end(); ++itr)
 		{
 			curCoord.x = (*itr)[0].asInt();
@@ -106,6 +111,7 @@ bool m_map::InitMap(std::string fileString)
 
 		}
 	}
+	// File unsuccessfully opened
 	else
 	{
 		MapInitialized = false;
@@ -115,7 +121,6 @@ bool m_map::InitMap(std::string fileString)
 	mapFile.close();
 
 	// Allocate a grid based on the input file
-	// Dynamically allocate the array based on the size in the JSON
 	m_nodeGrid = new Node*[m_maxXY.x+1];
 	//dynamicMemCounter++;
 	// Check if grid was allocated successfully
@@ -136,6 +141,7 @@ bool m_map::InitMap(std::string fileString)
 		}
 	}
 
+	// Initialize nodes
 	for(int ii=0;ii<=m_maxXY.x;ii++)
 	{
 		for(int jj=0;jj<=m_maxXY.y;jj++)
@@ -155,12 +161,16 @@ bool m_map::InitMap(std::string fileString)
 		m_nodeGrid[itr->x][itr->y].isObstacle = true;
 
 
+	// Map successfully initialized
 	MapInitialized = true;
 	return true;
 
 }
 
-// Print out the final optimal path
+// ----------------------------------------------------------- //
+// 						WritePathToFile 					   //
+// Description: output optimal path to the given file.         //
+// ----------------------------------------------------------- //
 void m_map::WritePathToFile(std::string fileString)
 {
 	Node *curNode = &m_nodeGrid[m_endCoord.x][m_endCoord.y];
@@ -170,10 +180,12 @@ void m_map::WritePathToFile(std::string fileString)
 	ofstream outputFile;
 	outputFile.open( fileString.c_str() );
 
+	// File successfully opened
 	if (outputFile.is_open() )
 	{
 		outputFile << "********OPTIMAL PATH********" << endl << endl;
 
+		// Start at the end node and use parent pointers until the start node is reached
 		while( !(curNode->location.x == m_startCoord.x && curNode->location.y == m_startCoord.y) )
 		{
 			currentCoord = { curNode->location.x,curNode->location.y };
@@ -196,11 +208,14 @@ void m_map::WritePathToFile(std::string fileString)
 	outputFile.close();
 }
 
-// Debugging function to print out the heap 
-void m_map::printHeap()
+// ----------------------------------------------------------- //
+//  						PrintSet                           //
+// Description: debugging function to print out the open set.  //
+// ----------------------------------------------------------- //
+void m_map::OpenSet::PrintSet()
 {
 	cout << "********HEAP********" << endl;
-	for(std::vector<Node*>::iterator itr=m_openSet.begin();itr!=m_openSet.end();++itr)
+	for(std::vector<Node*>::iterator itr=set.begin();itr!=set.end();++itr)
 	{
 		cout << "X: " << (*itr)->location.x << endl;
 		cout << "Y: " << (*itr)->location.y << endl;
@@ -217,7 +232,11 @@ void m_map::printHeap()
 	cout << endl << endl;
 }
 
-// Get the movement cost to move to the surrounding node
+// ----------------------------------------------------------- //
+//  				GetLocalMovementCost                       //
+// Description: return the rectilinear cost needed to move in  //
+// certain directions.                                         //
+// ----------------------------------------------------------- //
 Coord m_map::GetLocalMovementCost(int position)
 {
 
@@ -262,20 +281,33 @@ Coord m_map::GetLocalMovementCost(int position)
 
 }
 
-// Check if the node is in the grid
+
+// ----------------------------------------------------------- //
+//  					NodeIsInsideGrid                       //
+// Description: check whether the surrounding node in question //
+// is within the bounds of the grid as defined by start        //
+// coordinates, goal coordinates, and obstacle coordinates.    //
+// ----------------------------------------------------------- //
 bool m_map::NodeIsInsideGrid(Coord coord)
 {
 	return ( (coord.x <= m_maxXY.x && coord.x >= 0) && (coord.y <= m_maxXY.y && coord.y >= 0) );
 }
 
-// Check if the node is an obstacle
+// ----------------------------------------------------------- //
+//  					NodeIsObstacle                         //
+// Description: check whether the surrounding node in question //
+// is an obstacle.                                             //
+// ----------------------------------------------------------- //
 bool m_map::NodeIsObstacle(Coord coord)
 {
 	return m_nodeGrid[coord.x][coord.y].isObstacle;
 }
 
-
-// Check the coordinates are inside the grid and not an obstacle
+// ----------------------------------------------------------- //
+//  						NodeIsValid                        //
+// Description: check whether the surrounding node in question //
+// is not an obstacle and within the bounds of the grid.       //
+// ----------------------------------------------------------- //
 bool m_map::NodeIsValid(Coord coord)
 {
 	if( NodeIsInsideGrid(coord) && !NodeIsObstacle(coord) )
@@ -284,18 +316,23 @@ bool m_map::NodeIsValid(Coord coord)
 	return false;
 }
 
-bool m_map::AddExplorableNodes()
+// ----------------------------------------------------------- //
+//  				ExploreSurroundingNodes                    //
+// Description: examine 8 nodes surrounding the current node   //
+// and update the open and closed sets based on the movement   //
+// cost. Return false if explorable nodes have been exhausted. //
+// ----------------------------------------------------------- //
+bool m_map::ExploreSurroundingNodes()
 {
 
-	// Set the current node to the top of the open set
-	Node *curNode = m_openSet.back();
+	// Set the current node to the end of the open set (i.e. lowest cost)
+	Node *curNode = m_openSet.set.back();
 	Coord currentPosition;
 	currentPosition.x = curNode->location.x;
 	currentPosition.y = curNode->location.y;
 
 	// Add the best node to the closed set
 	curNode->isClosedSet = true;
-	curNode->isOpenSet = false;
 
 	// Node to hold potential nodes to be added to open set
 	Coord desiredCoord;
@@ -304,7 +341,8 @@ bool m_map::AddExplorableNodes()
 	Coord localMovementCost;
 
 	// Pop the current node off the open set
-	m_openSet.pop_back();
+	curNode->isOpenSet = false;
+	m_openSet.set.pop_back();
 
 	// Cycle through the surrounding nodes
 	for(int ii=NORTH;ii<=NORTHWEST;ii++)
@@ -316,28 +354,41 @@ bool m_map::AddExplorableNodes()
 
 		// Node is within bounds of grid and not an obstacle
 		if( NodeIsValid(desiredCoord) )
-			AddNodeToOpenSet(desiredCoord,localMovementCost);
+			UpdateExplorableSets(desiredCoord,localMovementCost);
 	}	
 
 	// Run out of nodes to explore, no possible solution
-	if(m_openSet.size() < 1)
+	if(m_openSet.set.size() < 1)
 		return false;
 
 	return true;
 }
 
-void m_map::AddNodeToOpenSet(Coord desiredCoord,Coord cost)
+// ----------------------------------------------------------- //
+//  				UpdateExplorableSets                       //
+// Description: add/remove nodes from the open and closed sets.//
+// If the current movement cost is less than the stored cost   //
+// of the surrounding node and the node is on the open set     //
+// then update the cost and insert it in the correct position  //
+// on the open set. Remove the node from the closed set if     //
+// the current movement cost is less than the stored cost.     //
+// If the surrounding node is not currently on the open or     //
+// closed set, add it to the open set.                         //
+// ----------------------------------------------------------- //
+void m_map::UpdateExplorableSets(Coord desiredCoord,Coord cost)
 {
 	Coord currentCoord = { desiredCoord.x-cost.x,desiredCoord.y-cost.y };
 	float desiredCost = m_nodeGrid[currentCoord.x][currentCoord.y].g + sqrt(cost.x*cost.x+cost.y*cost.y);
 	Node *desiredNode = &m_nodeGrid[desiredCoord.x][desiredCoord.y];
 
+	// The potential movement cost is lower than the stored value
 	if(desiredCost < desiredNode->g)
 	{
+		// Surrounding node is already on the open set
 		if( desiredNode->isOpenSet )
 		{
 			// Delete the node from the open set
-			DeleteNodeFromOpenSet(*desiredNode);
+			m_openSet.DeleteNode(*desiredNode);
 
 			// Update the movement costs and parent
 			desiredNode->g = desiredCost;
@@ -345,9 +396,9 @@ void m_map::AddNodeToOpenSet(Coord desiredCoord,Coord cost)
 			desiredNode->parent = &m_nodeGrid[currentCoord.x][currentCoord.y];
 
 			// Add the node back to the open set in the updated position
-			InsertNodeInOpenSet(*desiredNode);
+			m_openSet.Insert(*desiredNode);
 		}
-		// This needs some work
+
 		if(desiredNode->isClosedSet)
 			// Delete from closed set
 			DeleteNodeFromClosedSet(*desiredNode);
@@ -360,17 +411,21 @@ void m_map::AddNodeToOpenSet(Coord desiredCoord,Coord cost)
 		desiredNode->f = desiredNode->h + desiredNode->g;
 		desiredNode->parent = &m_nodeGrid[currentCoord.x][currentCoord.y];
 
-		InsertNodeInOpenSet(*desiredNode);
+		//InsertNodeInOpenSet(*desiredNode);
+		m_openSet.Insert(*desiredNode);
 	}
 }
 
-// Get the path
-bool m_map::SolveOptimalPath(std::string fileString, std::string outputFileString)
+// ----------------------------------------------------------- //
+//  			    	SolveOptimalPath                       //
+// Description: public function to solve the map.			   //
+// ----------------------------------------------------------- //
+bool m_map::SolveOptimalPath(std::string inputFileString, std::string outputFileString)
 {
 	// Initialize the grid
 	if( !MapInitialized )
 	{
-		if( !InitMap(fileString) )
+		if( !InitMap(inputFileString) )
 		{
 			cout << "Could not open file." << endl;
 			return false;
@@ -378,25 +433,22 @@ bool m_map::SolveOptimalPath(std::string fileString, std::string outputFileStrin
 	}
 
 	// Add the start node to the open list of nodes
-	m_openSet.push_back(&m_nodeGrid[m_startCoord.x][m_startCoord.y]);
-	m_nodeGrid[m_startCoord.x][m_startCoord.y].isOpenSet = true;
+	m_openSet.Insert(m_nodeGrid[m_startCoord.x][m_startCoord.y]);
 
 	// Current node is the start node
-	Node *curNode = m_openSet.front();
+	Node *curNode;
 
-	// Expand nodes until the goal node is reached
-	while( !(curNode->location.x == m_endCoord.x && curNode->location.y == m_endCoord.y) && m_openSet.size()>0)
-	{		
+	// Explore nodes until the end coordinate is reached or there are no explorable nodes left
+	do {
+		curNode = m_openSet.set.back();
+
 		// Search around for nodes that you can explore, add appropriate ones to open set
-		if( !AddExplorableNodes() )
+		if( !ExploreSurroundingNodes() )
 		{
 			cout << "No possible solution." << endl;
 			return false;
 		}
-
-		if(!m_openSet.empty())
-			curNode = m_openSet.back();
-	}
+	} while( !(curNode->location.x == m_endCoord.x && curNode->location.y == m_endCoord.y) && m_openSet.set.size()>0);
 
 	// Write output to file
 	WritePathToFile(outputFileString);
@@ -412,62 +464,59 @@ bool m_map::SolveOptimalPath(std::string fileString, std::string outputFileStrin
 	DeleteNodeGrid();
 
 	// Open set no longer needed
-	DeleteOpenSet();
+	m_openSet.DeleteSet();
 
 	return true;
 }
 
-// Copy make to an object for GUI purposes
+// Public function for accessing obstacles
 std::vector<Coord> m_map::copyObstacles()
 {
 	return m_obstacles;
 }
 
-// Copy make to an object for GUI purposes
+// Public function for accessing maximum coordinates
 Coord m_map::copyMaxCoord()
 {
 	return m_maxXY;
 }
 
-// Copy make to an object for GUI purposes
+// Public function for accessing goal coordinates
 Coord m_map::copyEndCoord()
 {
 	return m_endCoord;
 }
 
-// Copy make to an object for GUI purposes
+// Public function for accessing start coordinates
 Coord m_map::copyStartCoord()
 {
 	return m_startCoord;
 }
 
+// Public function for accessing optimal path
 std::vector<Coord> m_map::copyOptPath()
 {
 	return m_optPath;
 }
 
-void m_map::DeleteNodeFromOpenSet(Node &n)
+// ----------------------------------------------------------- //
+//  			    		DeleteNode                         //
+// Description: remove a node from the open set.			   //
+// ----------------------------------------------------------- //
+void m_map::OpenSet::DeleteNode(Node &n)
 {
 	if(n.isOpenSet)
 	{
 		// Remove the desired node from open set
 		n.isOpenSet = false;
 
-		/* DEBUG TIMER TO SEE IF EXTRA FIELD IS WORTH IT */
-		//timeval t1,t2;
-		//gettimeofday(&t1,NULL);
-
-		std::vector<Node*>::iterator itr = find(m_openSet.begin(),m_openSet.end(),&n);
+		std::vector<Node*>::iterator itr = find(set.begin(),set.end(),&n);
 		// Find returns end when the object doesn't exist in vector
-		while( itr != m_openSet.end() )
-		{
-			m_openSet.erase(itr);
-			itr = find(m_openSet.begin(),m_openSet.end(),&n);
-		}
-		//gettimeofday(&t2,NULL);
-
-		//std::cout << "Node found in: " << (double)t2.tv_sec-(double)t1.tv_sec+((double)t2.tv_usec)/1e6-((double)t1.tv_usec/1e6) << " seconds";
-		//std::cout << std::endl;
+		//while( itr != set.end() )
+		//{
+			set.erase(itr);
+			//itr = find(set.begin(),set.end(),&n);
+		//}
 	}
 }
 
@@ -476,83 +525,74 @@ void m_map::DeleteNodeFromClosedSet(Node &n)
 	n.isClosedSet = false;
 }
 
-void m_map::InsertNodeInOpenSet(Node &n)
+// ----------------------------------------------------------- //
+//  			    	SolveOptimalPath                       //
+// Description: insert the node into the open set at the       //
+// correct position based on movement cost.					   //
+// ----------------------------------------------------------- //
+void m_map::OpenSet::Insert(Node &n)
 {
-	// Already on the open set, just update the value and position
+	// Already on the open set
 	if(n.isOpenSet)
 		return;
-	//
 	else
 	{
-		m_openSet.insert(m_openSet.begin()+FindOpenSetPosition(n),&n);
+		set.insert(set.begin()+FindInsertPosition(n),&n);
 		n.isOpenSet = true;
 	}
 }
 
-// Pseudo binary search for where the node should be inserted in the open set
-int m_map::FindOpenSetPosition(Node n)
+// ----------------------------------------------------------- //
+//  			    	FindInsertPosition                     //
+// Description: pseudo binary search for finding the position  //
+// at which the current node should be inserted into the open  //
+// set. 													   //
+// ----------------------------------------------------------- //
+int m_map::OpenSet::FindInsertPosition(Node n)
 {
-	int upperBoundIdx = m_openSet.size() / 2;
+	// Find the indices the current node will be inserted in between
+	int upperBoundIdx = set.size() / 2;
 	int lowerBoundIdx = upperBoundIdx - 1;
-	int currentInterval = m_openSet.size() / 2;
+	// Amount of indices to traverse at once
+	int currentInterval = set.size() / 2;
 
-	//int counter = 0;
-
-	if( m_openSet.size() <= 0 )
+	// Open set is empty, just add the node at the 0 position
+	if( set.size() <= 0 )
 		return 0;
 
-	if( lowerBoundIdx <= 0)
-	{
-		if(n.f > m_openSet.at(0)->f)
-			return 0;
-		else
-			return 1;
-	}
+	// Check boundary conditions
+	if( n.f >= set.front()->f )
+		return 0;
+	if( n.f <= set.back()->f )
+		return set.size();
 
-	if( upperBoundIdx >= m_openSet.size()-1 )
-	{
-		if(n.f < m_openSet.at(m_openSet.size()-1)->f)
-			return m_openSet.size();
-		else
-			return m_openSet.size()-1;
-	}
-
-	while( !(n.f >= m_openSet.at(upperBoundIdx)->f && n.f <= m_openSet.at(lowerBoundIdx)->f) )
-	{
-		//counter++;
-		//std::cout << "Counter: " << counter << std::endl;
-
+	// Execute until the current node cost is sandwiched correctly between two nodes
+	do{
+		// Update the interval at which indices are traversed
 		currentInterval /= 2;
 		if( currentInterval <= 0 )
 			currentInterval = 1;
 
-		if( n.f > m_openSet.at(lowerBoundIdx)->f )
+		// Enforce the indices must be within the size of the vector
+		if(lowerBoundIdx < 0)
+			lowerBoundIdx = 0;
+		if( upperBoundIdx >= set.size() )
+			upperBoundIdx = set.size() - 1;
+
+		// Current node cost is greater than the lower bound, decrease index
+		if( n.f > set.at(lowerBoundIdx)->f )
 		{
 			lowerBoundIdx -= currentInterval;
 			upperBoundIdx -= currentInterval;
 		}
-		else if( n.f < m_openSet.at(upperBoundIdx)->f )
+		// Current node cost is less than the upper bound, increase index
+		else if( n.f < set.at(upperBoundIdx)->f )
 		{
 			lowerBoundIdx += currentInterval;
 			upperBoundIdx += currentInterval;
 		}
 
-		if( lowerBoundIdx <= 0)
-		{
-			if(n.f > m_openSet.at(0)->f)
-				return 0;
-			else
-				return 1;
-		}
-
-		if( upperBoundIdx >= m_openSet.size()-1 )
-		{
-			if(n.f < m_openSet.at(m_openSet.size()-1)->f)
-				return m_openSet.size();
-			else
-				return m_openSet.size()-1;
-		}
-	}
+	} while( !(n.f >= set.at(upperBoundIdx)->f && n.f <= set.at(lowerBoundIdx)->f) );
 
 	return upperBoundIdx;
 }
@@ -561,25 +601,17 @@ int m_map::FindOpenSetPosition(Node n)
 void m_map::DeleteNodeGrid()
 {
 	for(unsigned int ii=0;ii<m_maxXY.x+1;ii++)
-	{
 		delete [] m_nodeGrid[ii];
-		// Debug counter
-		//dynamicMemCounter--;
-		/* DEBUG */
-		//std::cout << "Mem counter: " << dynamicMemCounter << " " << "Itr: " << ii << std::endl;
-	}
 
-	//dynamicMemCounter--;
 	delete [] m_nodeGrid;
-	//std::cout << "Mem counter 2: " << dynamicMemCounter << std::endl;
 
 	m_nodeGrid = NULL;
 }
 
 // Delete the open set
-void m_map::DeleteOpenSet()
+void m_map::OpenSet::DeleteSet()
 {
-	m_openSet.clear();
+	set.clear();
 }
 
 // Clear the map of the obstacles and the optimal path
