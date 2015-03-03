@@ -510,13 +510,12 @@ void m_map::OpenSet::DeleteNode(Node &n)
 		// Remove the desired node from open set
 		n.isOpenSet = false;
 
+		// Find the reference to this node in the open set
 		std::vector<Node*>::iterator itr = find(set.begin(),set.end(),&n);
-		// Find returns end when the object doesn't exist in vector
-		//while( itr != set.end() )
-		//{
+
+		// Erase this node from the open set
+		if( itr != set.end() )
 			set.erase(itr);
-			//itr = find(set.begin(),set.end(),&n);
-		//}
 	}
 }
 

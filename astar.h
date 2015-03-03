@@ -16,6 +16,7 @@
 #include<math.h>
 #include<vector>
 #include <sys/time.h>
+#include <gtkmm.h>
 
 // Coordinate struct
 struct Coord{

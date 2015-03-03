@@ -4,6 +4,7 @@
 #include <gtkmm.h>
 #include "astar.h"
 #include<string.h>
+#include "worker.h"
 
 // Child area of the popup window MapWindow
 class MapDrawArea : public Gtk::DrawingArea
@@ -21,12 +22,32 @@ class MapDrawArea : public Gtk::DrawingArea
 		void ClearDrawingArea(const Cairo::RefPtr<Cairo::Context>& cr);
 };
 
+// Spinner window showing a spinner while astar is executing
+class SpinnerWindow : public Gtk::Window
+{
+public:
+	void StopSpinner() { spinner.stop(); };
+	void StartSpinner() { spinner.start(); };
+	SpinnerWindow();
+protected:
+	Gtk::Box SpinnerBox;
+	Gtk::Spinner spinner;
+	Glib::RefPtr< Gtk::TextBuffer > WaitBuffer;
+	Gtk::Label WaitLabel;
+};
+
 // Child window of the main window
 class MapWindow : public Gtk::Window
 {
 public:
 	MapWindow();
 	virtual ~MapWindow();
+
+	bool SolveOptimalPath();
+
+	// Used by the worker thread
+	void notify();
+
 protected:
 	MapDrawArea m_draw;
 
@@ -43,14 +64,22 @@ protected:
 	//Signal handlers
 	void on_button_file_clicked();
 	void on_button_solve_clicked();
+	void update_buttons();
 
 	// Chosen filename for input JSON file
 	std::string inputFilename;
 	std::string outputFilename;
 
 	// Functions
-	bool SolveOptimalPath();
 
+	// Threading
+	Worker worker;
+	Glib::Dispatcher m_Dispatcher;
+	Glib::Threads::Thread *m_WorkerThread;
+	void on_notification_from_worker_thread();
+
+	// Pointers for popup window
+	SpinnerWindow DialogWindow;
 };
 
 #endif //GTKMM_MENUWINDOW_H

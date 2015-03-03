@@ -12,13 +12,34 @@ MapDrawArea::MapDrawArea()
 	guiMapData.MapState = UNINITIALIZED;
 }
 
+SpinnerWindow::SpinnerWindow()
+: SpinnerBox(Gtk::ORIENTATION_VERTICAL),
+  spinner(),
+  WaitLabel("Please wait...")
+{
+	spinner.start();
+	SpinnerBox.pack_start(spinner,Gtk::PACK_EXPAND_PADDING,0);
+	SpinnerBox.pack_end(WaitLabel,Gtk::PACK_EXPAND_PADDING,0);
+	add(SpinnerBox);
+	show_all_children();
+	set_size_request(150,25);
+	set_title("Solving");
+	hide();
+}
+
 MapWindow::MapWindow()
 : m_draw(),
   m_VertParentBox(Gtk::ORIENTATION_VERTICAL),
   m_HorzChildBox(Gtk::ORIENTATION_HORIZONTAL),
-  m_Button_File("Choose file..."),
-  m_Button_Solve("Solve path...")
+  m_Button_File(),
+  m_Button_Solve(),
+  m_WorkerThread(NULL),
+  DialogWindow()
 {
+	// Add the text for the file button and picture
+	m_Button_File.add_pixlabel("open.gif","Choose file");
+	m_Button_Solve.add_pixlabel("worker.gif","Solve path");
+
 	// Add a buffer border to the window
 	set_border_width(10);
 
@@ -29,23 +50,30 @@ MapWindow::MapWindow()
 	// Set the minimum window size
 	set_size_request(400,300);
 
+	// Connect button handlers
 	m_Button_File.signal_clicked().connect(sigc::mem_fun(*this,
 		  &MapWindow::on_button_file_clicked) );
-
 	m_Button_Solve.signal_clicked().connect(sigc::mem_fun(*this,
 			  &MapWindow::on_button_solve_clicked) );
 
+	// Connect dispatcher for worker thread
+	m_Dispatcher.connect(sigc::mem_fun(*this,
+			  &MapWindow::on_notification_from_worker_thread));
+
+	// Disable the Solve button
 	m_Button_Solve.set_sensitive(false);
 
+	// Add a vertical box
 	add(m_VertParentBox);
-
 	m_VertParentBox.show();
 
+	// Horizontal box contains the buttons
 	m_HorzChildBox.pack_end(m_Button_File,Gtk::PACK_EXPAND_PADDING,0);
-	m_VertParentBox.pack_start(m_HorzChildBox,false,false,10);
-
-	m_VertParentBox.pack_start(m_draw);
 	m_HorzChildBox.pack_end(m_Button_Solve,Gtk::PACK_EXPAND_PADDING,0);
+
+	// Vertical box contains the horizontal box and the drawing area
+	m_VertParentBox.pack_start(m_HorzChildBox,false,false,10);
+	m_VertParentBox.pack_start(m_draw);
 
 	// Show
 	show_all_children();
@@ -62,7 +90,6 @@ bool MapWindow::SolveOptimalPath()
 		std::cout << "Map successfully solved in: " << (double)t2.tv_sec-(double)t1.tv_sec+((double)t2.tv_usec)/1e6-((double)t1.tv_usec/1e6) << " seconds";
 		std::cout << std::endl;
 	}
-
 	return result;
 }
 
@@ -76,8 +103,8 @@ void MapDrawArea::DrawObstacles(const Cairo::RefPtr<Cairo::Context>& cr)
 
 	// We should be able to just store the obstacles and path once
 	// Do need to update based on the window size
-	const std::vector<Coord> vObstacles = guiMapData.copyObstacles();
-	const Coord maxXY = guiMapData.copyMaxCoord();
+	std::vector<Coord> vObstacles = guiMapData.copyObstacles();
+	Coord maxXY = guiMapData.copyMaxCoord();
 	Coord originCoord = guiMapData.copyStartCoord();
 	Coord goalCoord = guiMapData.copyEndCoord();
 
@@ -197,50 +224,39 @@ void MapWindow::on_button_file_clicked()
 		{
 			// Clear out the obstacles and optimal path
 			m_draw.guiMapData.ClearMap();
-			//Notice that this is a std::string, not a Glib::ustring.
-			// Need to pass this to the astar algorithm
+
+			// Set the file names
 			inputFilename = dialog.get_filename().c_str();
 			outputFilename = inputFilename + ".out";
 			outputFilename = outputFilename.c_str();
+
+			// Initialize the obstacles and start/goal coordinates
 			m_draw.guiMapData.InitMap(inputFilename);
 			if(m_draw.guiMapData.MapInitialized)
 			{
 				m_draw.guiMapData.MapState = OBSTACLES_ONLY;
+				// Enable the Solve button
 				m_Button_Solve.set_sensitive(true);
 			}
 			else
 				m_draw.guiMapData.MapState = UNINITIALIZED;
-
 			break;
 		}
 
 		default:
-		{
-			std::cout << "No file selected." << std::endl;
 			break;
-		}
 	}
 }
 
+// Button handler for Solve button
 void MapWindow::on_button_solve_clicked()
 {
-	if(m_draw.guiMapData.MapState == FULL_MAP)
-	{
-		return;
-	}
+	// Show the spinner
+	DialogWindow.show();
 
-	if( SolveOptimalPath() )
-	{
-		m_draw.queue_draw();
-		m_Button_Solve.set_sensitive(false);
-	}
-	else
-	{
-		// Invalid file selected
-		Gtk::MessageDialog diagBox("Invalid file selected.");
-		diagBox.set_title("Invalid File");
-		diagBox.run();
-	}
+	// Spawn a new worker thread
+	if( !m_WorkerThread)
+		m_WorkerThread = Glib::Threads::Thread::create(sigc::bind(sigc::mem_fun(worker, &Worker::solve_path), this));
 }
 
 // Draw the obstacles, start point, end point, final path
@@ -263,3 +279,29 @@ bool MapDrawArea::on_draw(const Cairo::RefPtr<Cairo::Context>& cr)
 	return true;
 }
 
+// Function executed after the map has been solved
+void MapWindow::on_notification_from_worker_thread()
+{
+	if (m_WorkerThread && worker.has_stopped())
+	{
+		// Work is done.
+		DialogWindow.StopSpinner();
+		m_WorkerThread->join();
+		m_WorkerThread = NULL;
+
+		// Update buttons
+		m_Button_Solve.set_sensitive(false);
+		m_Button_File.set_sensitive(true);
+
+		// Force the on_draw function
+		m_draw.queue_draw();
+
+		// Hide the spinner window
+		DialogWindow.hide();
+	}
+}
+
+void MapWindow::notify()
+{
+  m_Dispatcher.emit();
+}
