@@ -445,9 +445,9 @@ bool m_map::SolveOptimalPath(std::string inputFileString, std::string outputFile
 		// Search around for nodes that you can explore, add appropriate ones to open set
 		if( !ExploreSurroundingNodes() )
 		{
-			cout << "No possible solution." << endl;
 			return false;
 		}
+
 	} while( !(curNode->location.x == m_endCoord.x && curNode->location.y == m_endCoord.y) && m_openSet.set.size()>0);
 
 	// Write output to file
@@ -572,12 +572,6 @@ int m_map::OpenSet::FindInsertPosition(Node n)
 		if( currentInterval <= 0 )
 			currentInterval = 1;
 
-		// Enforce the indices must be within the size of the vector
-		if(lowerBoundIdx < 0)
-			lowerBoundIdx = 0;
-		if( upperBoundIdx >= set.size() )
-			upperBoundIdx = set.size() - 1;
-
 		// Current node cost is greater than the lower bound, decrease index
 		if( n.f > set.at(lowerBoundIdx)->f )
 		{
@@ -590,6 +584,12 @@ int m_map::OpenSet::FindInsertPosition(Node n)
 			lowerBoundIdx += currentInterval;
 			upperBoundIdx += currentInterval;
 		}
+
+		// Enforce the indices must be within the size of the vector
+		if(lowerBoundIdx < 0)
+			lowerBoundIdx = 0;
+		if( upperBoundIdx >= set.size() )
+			upperBoundIdx = set.size() - 1;
 
 	} while( !(n.f >= set.at(upperBoundIdx)->f && n.f <= set.at(lowerBoundIdx)->f) );
 

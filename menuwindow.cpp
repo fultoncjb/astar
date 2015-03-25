@@ -1,7 +1,4 @@
 #include "menuwindow.h"
-#include <iostream>
-#include <sys/time.h>
-#include <gtkmm/box.h>
 
 MapDrawArea::~MapDrawArea()
 {
@@ -10,21 +7,6 @@ MapDrawArea::~MapDrawArea()
 MapDrawArea::MapDrawArea()
 {
 	guiMapData.MapState = UNINITIALIZED;
-}
-
-SpinnerWindow::SpinnerWindow()
-: SpinnerBox(Gtk::ORIENTATION_VERTICAL),
-  spinner(),
-  WaitLabel("Please wait...")
-{
-	spinner.start();
-	SpinnerBox.pack_start(spinner,Gtk::PACK_EXPAND_PADDING,0);
-	SpinnerBox.pack_end(WaitLabel,Gtk::PACK_EXPAND_PADDING,0);
-	add(SpinnerBox);
-	show_all_children();
-	set_size_request(150,25);
-	set_title("Solving");
-	hide();
 }
 
 MapWindow::MapWindow()
@@ -81,21 +63,14 @@ MapWindow::MapWindow()
 
 bool MapWindow::SolveOptimalPath()
 {
-	timeval t1,t2;
-	gettimeofday(&t1,NULL);
 	bool result = m_draw.guiMapData.SolveOptimalPath( inputFilename.c_str(), outputFilename.c_str() );
-	gettimeofday(&t2,NULL);
-	if(result)
-	{
-		std::cout << "Map successfully solved in: " << (double)t2.tv_sec-(double)t1.tv_sec+((double)t2.tv_usec)/1e6-((double)t1.tv_usec/1e6) << " seconds";
-		std::cout << std::endl;
-	}
+
 	return result;
 }
 
 void MapDrawArea::DrawObstacles(const Cairo::RefPtr<Cairo::Context>& cr)
 {
-	// This is where we draw on the window
+	// Get size characteristics of the window
 	Gtk::Allocation allocation = get_allocation();
 	const int width = allocation.get_width();
 	const int height = allocation.get_height();
@@ -251,12 +226,17 @@ void MapWindow::on_button_file_clicked()
 // Button handler for Solve button
 void MapWindow::on_button_solve_clicked()
 {
-	// Show the spinner
+	// Find the middle of the window and show the SpinnerWindow
+	DialogWindow.set_position(Gtk::WIN_POS_CENTER_ON_PARENT);
+	DialogWindow.get_parent_window();
 	DialogWindow.show();
 
 	// Spawn a new worker thread
-	if( !m_WorkerThread)
+	if( !m_WorkerThread )
+	{
 		m_WorkerThread = Glib::Threads::Thread::create(sigc::bind(sigc::mem_fun(worker, &Worker::solve_path), this));
+		DialogWindow.spawn_timer_thread();
+	}
 }
 
 // Draw the obstacles, start point, end point, final path
@@ -284,8 +264,15 @@ void MapWindow::on_notification_from_worker_thread()
 {
 	if (m_WorkerThread && worker.has_stopped())
 	{
+		// Show a window dialog if there is no solution
+		if( !worker.get_solution_exists() )
+		{
+			DialogWindow.notification();
+			Gtk::MessageDialog *dlg = new Gtk::MessageDialog("No solution exists.");
+			dlg->run();
+			delete dlg;
+		}
 		// Work is done.
-		DialogWindow.StopSpinner();
 		m_WorkerThread->join();
 		m_WorkerThread = NULL;
 
@@ -297,11 +284,149 @@ void MapWindow::on_notification_from_worker_thread()
 		m_draw.queue_draw();
 
 		// Hide the spinner window
-		DialogWindow.hide();
+		DialogWindow.notification();
 	}
 }
 
 void MapWindow::notify()
 {
   m_Dispatcher.emit();
+}
+
+void MapWindow::update_timer()
+{
+
+}
+
+Worker::Worker() { };
+
+void Worker::solve_path(MapWindow *window)
+{
+	Glib::Threads::Mutex::Lock lock(m_Mutex);
+	m_has_stopped = false;
+
+	lock.release();
+	bool result = false;
+	result = window->SolveOptimalPath();
+	lock.acquire();
+	m_has_stopped = true;
+	m_solution_exists = result;
+	lock.release();
+
+	window->notify();
+}
+
+bool Worker::has_stopped()
+{
+  Glib::Threads::Mutex::Lock lock(m_Mutex);
+  return m_has_stopped;
+}
+
+SpinnerWindow::SpinnerWindow()
+: SpinnerBox(Gtk::ORIENTATION_VERTICAL),
+  spinner(),
+  WaitLabel("Please wait..."),
+  TimeElapsed("0.00"),
+  m_TimerWorkerThread(NULL)
+{
+	m_Dispatcher.connect(sigc::mem_fun(*this,
+				  &SpinnerWindow::notification));
+	SpinnerBox.pack_start(spinner,Gtk::PACK_EXPAND_PADDING,0);
+	SpinnerBox.pack_end(WaitLabel,Gtk::PACK_EXPAND_PADDING,0);
+	SpinnerBox.pack_end(TimeElapsed,Gtk::PACK_EXPAND_PADDING,0);
+	add(SpinnerBox);
+	show_all_children();
+	set_size_request(150,25);
+	set_title("Solving");
+	hide();
+}
+
+// Launch a new thread to keep track of the time
+void SpinnerWindow::spawn_timer_thread()
+{
+	if( !m_TimerWorkerThread )
+		m_TimerWorkerThread = Glib::Threads::Thread::create(sigc::bind(sigc::mem_fun(timer_thread, &TimerWorker::keep_time), this));
+
+}
+
+// Update the GUI with the current time elapsed
+void SpinnerWindow::update_timer()
+{
+	double time_elapsed;
+	timer_thread.get_timer(&time_elapsed);
+	Glib::ustring time_string = " ";
+
+	time_string = Glib::ustring::compose("%1\n",time_elapsed);
+	// Set the text in the spinner window
+	TimeElapsed.set_label(time_string);
+}
+
+TimerWorker::TimerWorker() { };
+
+bool TimerWorker::has_stopped()
+{
+  Glib::Threads::Mutex::Lock lock(m_Mutex);
+  return m_has_stopped;
+}
+
+// Establish the start time to measure against
+void TimerWorker::start_timer()
+{
+	gettimeofday(&BeginTimer,NULL);
+}
+
+// Measure the time since the BeginTimer was started
+void TimerWorker::get_timer(double *timer_var)
+{
+	gettimeofday(&EndTimer,NULL);
+	*timer_var = (double)EndTimer.tv_sec-(double)BeginTimer.tv_sec+((double)EndTimer.tv_usec)/1e6-((double)BeginTimer.tv_usec/1e6);
+}
+
+// Keep track of the time it takes to solve the map
+void TimerWorker::keep_time(SpinnerWindow *m_window)
+{
+	// Lock the data
+	Glib::Threads::Mutex::Lock lock(m_Mutex);
+	m_has_stopped = false;
+	start_timer();
+	m_window->StartSpinner();
+	m_window->show();
+	lock.release();
+
+	// Execute until map solved
+	while( !m_has_stopped )
+	{
+		lock.acquire();
+
+		// Update the time
+		m_window->update_timer();
+		lock.release();
+
+		// Sleep thread every 1 ms
+		usleep(1000);
+	}
+
+	lock.release();
+}
+
+// Notification from timer thread when finished
+void SpinnerWindow::notification()
+{
+	timer_thread.has_stopped(true);
+	spinner.stop();
+	// Work done, join threads
+	if( m_TimerWorkerThread && timer_thread.has_stopped() )
+	{
+		m_TimerWorkerThread->join();
+		m_TimerWorkerThread = NULL;
+	}
+	// Hide the window when done
+	hide();
+}
+
+// Read if the timer thread has stopped
+void TimerWorker::has_stopped(bool stopped)
+{
+	Glib::Threads::Mutex::Lock lock(m_Mutex);
+	m_has_stopped = stopped;
 }
